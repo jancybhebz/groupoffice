@@ -329,7 +329,14 @@ class TemplateParser {
 		return $cls::findById($id, !empty($properties) ? explode(",", $properties) : []);
 	}
 
-	private function filterLinks(Entity $entity, $entityName, $properties = null) {
+	/**
+	 * @param Entity|GO\Base\Db\ActiveRecord $entity
+	 * @param $entityName
+	 * @param $properties
+	 * @return mixed
+	 * @throws Exception
+	 */
+	private function filterLinks($entity, $entityName, $properties = null) {
 
 		$entityType = EntityType::findByName($entityName);
 		if(!$entityType) {
@@ -810,37 +817,50 @@ class TemplateParser {
 			$value = $this->getVarFiltered($tag['expression']);
 		}
 
-		$o = &$this->models;
-
 		$path = explode(".", $tag['varName']);
+		$this->applyAssignToModels($tag, $path, $value,$this->models);
+
+		if(isset($this->models['parent'])) {
+			//apply assigns to parent parser if we are iterating an [each] block
+			$this->applyAssignToModels($tag, $path, $value,$this->models['parent']->models);
+		}
+
+		return $tag;
+	}
+
+	/**
+	 * @param $tag The tag we are replacing
+	 * @param $path The variable path
+	 * @param $value The value to set
+	 * @param $models The template models that are available
+	 * @return mixed|void
+	 */
+	private function applyAssignToModels($tag, $path, $value, &$models) {
 
 		$lastPart = array_pop($path);
 
 		foreach($path as $part) {
-			if(is_array($o)) {
-				if (!isset($o[$part])) {
+			if(is_array($models)) {
+				if (!isset($models[$part])) {
 					//ignore invalid assign
 					return $tag;
 				}
-				$o = &$o[$part];
+				$models = &$models[$part];
 			} else{
-				if (!isset($o->$part)) {
+				if (!isset($models->$part)) {
 					//ignore invalid assign
 					return $tag;
 				}
-				$o = &$o->$part;
+				$models = &$models->$part;
 			}
 		}
 
-		if(is_array($o)) {
-			$o[$lastPart] = $value;
-		} else if(is_object($o)) {
-			$o->$lastPart = $value;
+		if(is_array($models)) {
+			$models[$lastPart] = $value;
+		} else if(is_object($models)) {
+			$models->$lastPart = $value;
 		}
 
-
-
-		return $tag;
 	}
 
 
@@ -949,9 +969,10 @@ class TemplateParser {
 			if($part == "") {
 				continue;
 			}
-			
+
+
 			if(
-							is_numeric($part) ||
+							(is_numeric($part) && substr($part, 0, 1) != "0") ||
 							$part == 'true' ||
 							$part == 'false' ||
 							$part == 'null' ||

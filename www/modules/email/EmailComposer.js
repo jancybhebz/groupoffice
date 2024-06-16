@@ -393,7 +393,7 @@ GO.email.EmailComposer = function(config) {
 		})
 	];
 
-	tbar.push(this.emailEditor.getAttachmentsButton(), 
+	tbar.push(this.emailEditor.getAttachmentsButton([this.sendButton,this.saveButton]),
 			this.showMenuButton = new Ext.Button({
 				tooltip : t("Add recipients", "email"),
 				// iconCls : 'ic-contact-mail',
@@ -403,9 +403,9 @@ GO.email.EmailComposer = function(config) {
 		
 		this.templatesStore = new GO.data.GroupingStore({
 			url : GO.url("email/template/emailSelection"),
-			sortInfo:{field: 'name',direction: "ASC"},
+			sortInfo:{field: "name", direction: "ASC"},
 			baseParams : {
-				'type':"0"
+				type: "0"
 			},
 			reader: new Ext.data.JsonReader({
 				root: 'results',
@@ -413,9 +413,9 @@ GO.email.EmailComposer = function(config) {
 				id: 'id',
 				fields: ['id', 'name', 'group', 'text','template_id','checked','group_name', 'group_id'],
 			}),
-			groupField:'group_id',
+			groupField: "group_name",
 			remoteSort : true,
-			remoteGroup:true
+			remoteGroup: true
 		});
 		
 		tbar.push(this.templatesBtn = new Ext.Button({
@@ -516,8 +516,6 @@ GO.email.EmailComposer = function(config) {
 									template_id: "default_for_account"
 								});
 
-								
-								
 								this.fireEvent('load', this, records);
 								this.loaded = true;
 							}
@@ -547,11 +545,6 @@ GO.email.EmailComposer = function(config) {
 								var fromComboValue = this.fromCombo.getValue();
 								this.fromCombo.store.load();
 								this.fromCombo.setValue(fromComboValue);
-								
-								
-								
-								
-								
 							},
 							scope : this
 						}),
@@ -913,9 +906,10 @@ Ext.extend(GO.email.EmailComposer, GO.Window, {
 				aliases:{r:'email/alias/store','limit':0}
 			};
 			
-				requests.templates={r:'email/template/emailSelection', 'groupBy':'group_id'};
-				if (!GO.util.empty(config.account_id))
-					requests.templates['account_id'] = config.account_id;
+			requests.templates={r:'email/template/emailSelection', 'groupBy':'group_id'};
+			if (!GO.util.empty(config.account_id)) {
+				requests.templates['account_id'] = config.account_id;
+			}
 			
 				
 			GO.request({

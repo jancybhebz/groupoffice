@@ -94,6 +94,24 @@ class Server extends Entity {
 	protected $password;
 
 
+	public function historyLog(): bool|array
+	{
+		$log = parent::historyLog();
+
+		if(isset($log['password'])) {
+			$log['password'][0] = "MASKED";
+			$log['password'][1] = "MASKED";
+		}
+
+		if(isset($log['smtpPassword'])) {
+			$log['smtpPassword'][0] = "MASKED";
+			$log['smtpPassword'][1] = "MASKED";
+		}
+
+		return $log;
+	}
+
+
 	/**
 	 * @throws Exception
 	 */
@@ -176,7 +194,7 @@ class Server extends Entity {
 		}
 
 
-		if($this->syncUsers) {
+		if($this->syncGroups) {
 			try {
 				Record::find($connection, $this->groupsDN, $this->syncGroupsQuery)->fetch();
 			} catch (Exception $e) {

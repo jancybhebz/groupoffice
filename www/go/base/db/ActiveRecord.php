@@ -43,6 +43,7 @@ namespace GO\Base\Db;
 use GO\Base\Db\PDO;
 use GO;
 use go\core\customfield\Html;
+use go\core\db\DbException;
 use go\core\db\Query;
 use go\core\ErrorHandler;
 use go\core\http\Exception;
@@ -127,15 +128,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 	 */
 	const DELETE_RESTRICT = "RESTRICT";
 
-//	/**
-//	 * The database connection of this record
-//	 *
-//	 * @var PDO
-//	 */
-//	private static $db;
-
-
-
 	private $_attributeLabels;
 
 	public static $db; //The database the active record should use
@@ -202,7 +194,7 @@ abstract class ActiveRecord extends \GO\Base\Model{
 	
 	/**
 	 * For compatibility with new framework
-	 * @return type
+	 * @return \go\core\orm\EntityType
 	 */
 	public static function entityType() {
 		return \go\core\orm\EntityType::findByClassName(static::class);
@@ -308,7 +300,7 @@ abstract class ActiveRecord extends \GO\Base\Model{
 	 * The name of the column that has the foreignkey the the ACL record
 	 * If column 'acl_id' exists it default to this
 	 * You can use field of a relation separated by a dot (eg: 'category.acl_id')
-	 * @return StringHelper ACL to check for permissions.
+	 * @return string ACL to check for permissions.
 	 */
 	public function aclField(){
 		return false; //return isset($this->columns['acl_id']) ? 'acl_id' : false;
@@ -467,10 +459,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 	 */
 	protected $columns;
 
-//	=array(
-//				'id'=>array('type'=>PDO::PARAM_INT,'required'=>true,'length'=>null, 'validator'=>null,)
-//			);
-//
 	private $_new=true;
 	
 	private $_isStaticModel;
@@ -574,9 +562,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 	public function attributeLabels(){
 		if(!isset($this->_attributeLabels)){
 			$this->_attributeLabels = array();
-
-//			$classParts = explode('\\',$this->className());
-//			$prefix = strtolower(array_pop($classParts));
 
 			foreach($this->columns as $columnName=>$columnData){
 				
@@ -882,28 +867,29 @@ abstract class ActiveRecord extends \GO\Base\Model{
 	 */
 	public function findAclId() {
 		if (!$this->aclField()) {
-			//TODO: Is this right?
-			return Acl::getReadOnlyAclId();
-//			$moduleName = $this->getModule();
-//			return \GO::modules()->{$moduleName}->aclId;
+			$moduleName = $this->getModule();
+			$module = Module::findByName(null, $moduleName);
+			if($module) {
+				return $module->getShadowAclId();
+			} else {
+				return null;
+			}
 		}
 
 		//removed caching of _acl_id because the relation is cached already and when the relation changes the wrong acl_id is returned,
 		////this happened when moving contacts from one acl to another.
-		//if(!isset($this->_acl_id)){
-			//ACL is mapped to a relation. eg. $contact->addressbook->acl_id is defined as "addressbook.acl_id" in the contact model.
-			if(!$this->isAclOverwritten()){
-				$modelWithAcl = $this->findRelatedAclModel();
-				if($modelWithAcl){
-					$this->_acl_id = $modelWithAcl->findAclId();
-				} else {
-					$this->_acl_id = $this->{$this->aclField()};
-				}
-			}else
-			{
-				$this->_acl_id = $this->{$this->aclOverwrite()};
+		//ACL is mapped to a relation. eg. $contact->addressbook->acl_id is defined as "addressbook.acl_id" in the contact model.
+		if(!$this->isAclOverwritten()){
+			$modelWithAcl = $this->findRelatedAclModel();
+			if($modelWithAcl){
+				$this->_acl_id = $modelWithAcl->findAclId();
+			} else {
+				$this->_acl_id = $this->{$this->aclField()};
 			}
-		//}
+		}else
+		{
+			$this->_acl_id = $this->{$this->aclOverwrite()};
+		}
 
 		return $this->_acl_id;
 	}
@@ -948,7 +934,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 			return \GO\Base\Model\Acl::MANAGE_PERMISSION;
 		}
 
-		//if($this->isNew && !$this->joinAclField){
 		if(empty($this->{$this->aclField()}) && !$this->isJoinedAclField){
 			return $this->getPermissionLevelForNewModel();
 		}else
@@ -973,7 +958,7 @@ abstract class ActiveRecord extends \GO\Base\Model{
 	 * total on each pagination page when limit 0,n is used.
 	 *
 	 * @param array $params
-	 * @return StringHelper
+	 * @return string
 	 */
 	private function _getFindQueryUid($params){
 		//create unique query id
@@ -1123,7 +1108,7 @@ abstract class ActiveRecord extends \GO\Base\Model{
 	 *
 	 * @param boolean $single
 	 * @param string $tableAlias
-	 * @return StringHelper
+	 * @return string
 	 */
 	public function getDefaultFindSelectFields($single=false, $tableAlias='t'){
 
@@ -1252,11 +1237,9 @@ abstract class ActiveRecord extends \GO\Base\Model{
 		if(!empty($params['debugSql'])){
 			$this->_debugSql=true;
 			//GO::debug($params);
-		}else
-		{
+		}else {
 			$this->_debugSql=!empty(GO::session()->values['debugSql']);
 		}
-//		$this->_debugSql=true;
 
 
 		if(empty($params['userId'])){
@@ -1293,16 +1276,9 @@ abstract class ActiveRecord extends \GO\Base\Model{
 			$calcFoundRows=false;
 		}
 
-//		$select .= "SQL_NO_CACHE ";
-
-
-
-		if(empty($params['fields']))
-			$params['fields']=$this->getDefaultFindSelectFields(isset($params['limit']) && $params['limit']==1);
-//		else
-//			go()->debug($params['fields']);
-
-
+		if(empty($params['fields'])) {
+			$params['fields'] = $this->getDefaultFindSelectFields(isset($params['limit']) && $params['limit'] == 1);
+		}
 		$fields = $params['fields'].' ';
 
 		$joinRelationSelectFields='';
@@ -1455,8 +1431,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 
 				if (empty($searchFields))
 					throw new \Exception("No automatic search fields defined for " . $this->className() . ". Maybe this model has no varchar fields? You can override function getFindSearchQueryParamFields() or you can supply them with FindParams::searchFields()");
-
-				//`name` LIKE "test" OR `content` LIKE "test"
 
 				$first = true;
 				foreach ($searchFields as $searchField) {
@@ -1635,6 +1609,7 @@ abstract class ActiveRecord extends \GO\Base\Model{
 			//SQLSTATE[42S22]: Column not found: 1054 Unknown column 'progress' in 'order clause
 			if(strpos($msg, 'order clause')!==false && strpos($msg, 'Unknown column')!==false)
 			{
+				go()->error($msg);
 				$msg = GO::t("Sorry, you can't sort on that column. Please click on another column header in the grid for sorting.");
 			}
 
@@ -1711,12 +1686,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 			}
 		}
 
-//		//$result->setFetchMode(PDO::FETCH_CLASS | PDO::FETCH_PROPS_LATE, $this->className());
-//		if($fetchObject)
-//			$result->setFetchMode(PDO::FETCH_CLASS, $this->className(),array(false));
-//		else
-//			$result->setFetchMode (PDO::FETCH_ASSOC);
-
     //TODO these values should be set on findByPk too.
     $AS->findParams=$params;
     if(isset($params['relation']))
@@ -1780,9 +1749,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 			throw new \Exception("Invalid characters found in column name: ".$name);
 
 		$arr = explode('.',$name);
-
-//		for($i=0,$max=count($arr);$i<$max;$i++)
-//			$arr[$i]=$this->getDbConnection ()->quote($arr[$i], PDO::PARAM_STR);
 
 		return '`'.implode('`.`',$arr).'`';
 	}
@@ -1915,11 +1881,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 
 	public function findByPk($primaryKey, $findParams=false, $ignoreAcl=false, $noCache=false){
 
-//		if(GO::config()->debug && $findParams != false){
-//			throw new \Exception('Adding findparams to findByPk is not yet available');
-//		}
-		
-//		GO::debug($this->className()."::findByPk($primaryKey)");
 		if(empty($primaryKey))
 			return false;
 
@@ -1956,10 +1917,8 @@ abstract class ActiveRecord extends \GO\Base\Model{
 
 			$models =  $result->fetchAll();
 			$model = isset($models[0]) ? $models[0] : false;
-		}catch(PDOException $e){
-			$msg = $e->getMessage()."\n\nFull SQL Query: ".$sql;
-
-			throw new \Exception($msg);
+		}catch(\PDOException $e){
+			throw new DbException($e, $sql);
 		}
 
 		if($model && !$ignoreAcl && !$model->checkPermissionLevel(\GO\Base\Model\Acl::READ_PERMISSION)){
@@ -2016,16 +1975,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 					'labelAttribute'=>function($model){return !empty($model->mUser) ? $model->mUser->name : '';}
 					);
 		}
-		
-		
-//\GO::debug($cfMod);
-//		if($this->customfieldsModel()){
-//			$r['customfields']=array(
-//					'type'=>self::BELONGS_TO,
-//					'model'=>$this->customfieldsModel(),
-//					'field'=>'id'
-//					);
-//		}
 
 		return $r;
 	}
@@ -2555,26 +2504,11 @@ abstract class ActiveRecord extends \GO\Base\Model{
 			$r = new \ReflectionObject($this);
 			$publicProperties = $r->getProperties(\ReflectionProperty::IS_PUBLIC);
 			foreach($publicProperties as $prop){
-				//$att[$prop->getName()]=$prop->getValue($this);
-				//$prop = new \ReflectionProperty();
 				if(!$prop->isStatic()) {
-					//$this->_magicAttributeNames[]=$prop->getName();
 					self::$_magicAttributeNames[$this->className()][]=$prop->name;
 				}
 			}
 
-//			$methods = $r->getMethods();
-//
-//			foreach($methods as $method){
-//				$methodName = $method->getName();
-//				if(substr($methodName,0,3)=='get' && !$method->getNumberOfParameters()){
-//
-//					echo $propName = strtolower(substr($methodName,3,1)).substr($methodName,4);
-//
-//					$this->_magicAttributeNames[]=$propName;
-//				}
-//			}
-//
 			GO::cache ()->set('magicattributes', self::$_magicAttributeNames);
 		}
 		return self::$_magicAttributeNames[$this->className()];
@@ -2690,11 +2624,7 @@ abstract class ActiveRecord extends \GO\Base\Model{
 		}
 		
 		$relatedAclModel = $this->findRelatedAclModel();
-				
-				
-//		if(!$relatedAclModel)
-//			throw new \Exception(var_export($relatedAclModel, true));
-		
+
 		return $relatedAclModel && $relatedAclModel->findAclId() != $this->{$this->aclOverwrite()};
 	}
 
@@ -2873,7 +2803,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 						}
 						
 						$this->setValidationError($field, $msg);
-//						$this->setValidationError($field, sprintf(GO::t("%s \"%s\" already exists"),$this->localizedName, $this->_attributes[$field]));
 					}
 				}
 			}
@@ -2881,24 +2810,13 @@ abstract class ActiveRecord extends \GO\Base\Model{
 	}
 
 
-//	public function getFilesFolder(){
-//		if(!$this->hasFiles())
-//			throw new \Exception("getFilesFolder() called on ".$this->className()." but hasFiles() is false for this model.");
-//
-//		if($this->files_folder_id==0)
-//			return false;
-//
-//		return \GO\Files\Model\Folder::model()->findByPk($this->files_folder_id);
-//
-//	}
-
 	/**
 	 * Get the column name of the field this model sorts on.
 	 * It will automatically give the highest number to new models.
 	 * Useful in combination with \GO\Base\Controller\AbstractModelController::actionSubmitMultiple().
 	 * Drag and drop actions will save the sort order in that action.
 	 *
-	 * @return StringHelper
+	 * @return string
 	 */
 	public function getSortOrderColumn(){
 		return false;
@@ -3028,7 +2946,7 @@ abstract class ActiveRecord extends \GO\Base\Model{
 	 * Get the URL to download a file column
 	 *
 	 * @param string $column
-	 * @return StringHelper
+	 * @return string
 	 */
 	public function getFileColumnUrl($column){
 
@@ -3325,7 +3243,7 @@ abstract class ActiveRecord extends \GO\Base\Model{
 	/**
 	 * Get the message for the log module. Returns the contents of the first text column by default.
 	 *
-	 * @return StringHelper
+	 * @return string
 	 */
 	public function getLogMessage($action){
 
@@ -3393,31 +3311,7 @@ abstract class ActiveRecord extends \GO\Base\Model{
 					
 					$modifications[$key]=array($newVal, $oldVal);
 				}
-				
-				// Also track customfieldsrecord changes
-//				if($this->customfieldsRecord && $modifiedCustomfieldAttrs){
-//										
-//					foreach($modifiedCustomfieldAttrs as  $key=>$oldVal){
-//						$newVal = $this->customfieldsRecord->getAttribute($key);
-//						if(empty($newVal) && empty($oldVal)){
-//						continue;
-//					}
-//
-//					if(strlen($newVal) > $cutoffLength){
-//						$newVal = substr($newVal,0,$cutoffLength).$cutoffString;
-//					}
-//					
-//					if(strlen($oldVal) > $cutoffLength){
-//						$oldVal = substr($oldVal,0,$cutoffLength).$cutoffString;
-//					}
-//					
-//					$attrLabel = $this->getCustomfieldsRecord()->getAttributeLabelWithoutCategoryName($key);
-//					
-//					$modifications[$attrLabel.' ('.$key.')']=array($oldVal,$newVal);	
-//					}
-//				}
-				
-				
+
 				return $modifications;
 			case "create":
 				$attrs =  $this->getAttributes();
@@ -3714,10 +3608,10 @@ abstract class ActiveRecord extends \GO\Base\Model{
 		}
 		
 		if(isset($attr['mtime'])) {
-			$attr['modifiedAt'] = \DateTime::createFromFormat("U", $attr['mtime']);
+			$search->modifiedAt = \DateTime::createFromFormat("U", $attr['mtime']);
 
 		} else {
-			$attr['modifiedAt'] = \DateTime::createFromFormat("U", $this->mtime);
+			$search->modifiedAt = \DateTime::createFromFormat("U", $this->mtime);
 		}
 		unset($attr['mtime']);
 
@@ -3729,7 +3623,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 			$attr['description'] = '';
 		}		
 		$search->setValues($attr);
-		unset($attr['modifiedAt']);
 		
 		$search->entityId = $this->id;
 		$search->setAclId(!empty($attr['aclId']) ? $attr['aclId'] : $this->findAclId());
@@ -3767,66 +3660,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 			'core_search_word',$keywords
 		)->execute();
 
-//		//GO::debug($attr);
-//
-//		if($attr){
-//
-//			$model = \GO\Base\Model\SearchCacheRecord::model()->findByPk(array('model_id'=>$this->pk, 'model_type_id'=>$this->modelTypeId()),false,true);
-//
-//			if(!$model)
-//				$model = new \GO\Base\Model\SearchCacheRecord();
-//
-//			$model->mtime=0;
-//
-//			$acl_id = !empty($attr['acl_id']) ? $attr['acl_id'] : $this->findAclId();
-//
-//			//if model doesn't have an acl we use the acl of the module it belongs to.
-//			if(!$acl_id)
-//				$acl_id = GO::modules()->{$this->getModule ()}->acl_id;
-//
-//			$defaultUserId = isset(GO::session()->values['user_id']) ? GO::session()->values['user_id'] : 1;
-//
-//			//cache type in default system language.
-//			if(GO::user())
-//				GO::language()->setLanguage(GO::config()->language);
-//
-//
-//			//GO::debug($model);
-//			$autoAttr = array(
-//				'model_id'=>$this->pk,
-//				'model_type_id'=>$this->modelTypeId(),
-//				'user_id'=>isset($this->user_id) ? $this->user_id : $defaultUserId,
-//				'module'=>$this->module,
-//				'model_name'=>$this->className(),
-//				'name' => '',
-//				'description'=>'',
-//				'type'=>$this->localizedName, //deprecated, for backwards compatibilty
-//				'keywords'=>$this->getSearchCacheKeywords($this->localizedName.','.implode(',', $attr)),
-//				'mtime'=>$this->mtime,
-//				'ctime'=>$this->ctime,
-//				'acl_id'=>$acl_id
-//			);
-//
-//			$attr = array_merge($autoAttr, $attr);
-//
-//			if(GO::user())
-//				GO::language()->setLanguage(GO::user()->language);
-//
-//			if($attr['description']==null)
-//				$attr['description']="";
-//
-//			$model->setAttributes($attr, false);
-//			$model->cutAttributeLengths();
-////			$model->save(true);
-//			if(!$model->save(true)){
-//				throw new \Exception("Error saving search cache record:\n".implode("\n", $model->getValidationErrors()));
-//			}
-//
-//			return $model;
-//
-//		}
-//		return false;
-		
 		return true;
 	}
 
@@ -3849,9 +3682,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 	public function cutAttributeLengths(){
 		$attr = $this->getModifiedAttributes();
 		foreach($attr as $attributeName=>$oldVal){
-//			if(!empty($this->columns[$attribute]['length']) && \GO\Base\Util\StringHelper::length($this->_attributes[$attribute])>$this->columns[$attribute]['length']){
-//				$this->_attributes[$attribute]=\GO\Base\Util\StringHelper::substr($this->_attributes[$attribute], 0, $this->columns[$attribute]['length']);
-//			}
 			$this->cutAttributeLength($attributeName);
 		}
 	}
@@ -3896,11 +3726,7 @@ abstract class ActiveRecord extends \GO\Base\Model{
 
 				if(is_string($value) && ($attr['gotype']=='textfield' || $attr['gotype']=='customfield' || $attr['gotype']=='textarea') && !in_array($value,$keywords)){
 					if(!empty($value)) {
-//						if($attr['gotype'] == 'textarea') {
-//							$keywords = array_merge($keywords, SearchableTrait::splitTextKeywords($value));
-//						} else {
-							$keywords[] = $value;
-//						}
+						$keywords[] = $value;
 					}
 				}
 			}
@@ -4016,15 +3842,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 
 		$updates=array();
 
-		//$pks = is_array($this->primaryKey()) ? $this->primaryKey() : array($this->primaryKey());
-//		foreach($this->columns as $field => $value)
-//		{
-//			if(!in_array($field,$pks))
-//			{
-//				$updates[] = "`$field`=:".$field;
-//			}
-//		}
-//
 		$i = 0;
 		$paramMap = [];		
 		$bindParams=array();
@@ -4066,8 +3883,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 
 		try{
 			$stmt = $this->getDbConnection()->prepare($sql);
-
-			//$pks = is_array($this->primaryKey()) ? $this->primaryKey() : array($this->primaryKey());
 
 			foreach($bindParams as $tag => $field){
 				$attr = $this->getColumn($field);
@@ -4184,17 +3999,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 				unset($stmt);
 			}			
 		}
-
-		//Set the foreign fields of the deleted relations to 0 because the relation doesn't exist anymore.
-		//We do this in a separate loop because relations that should be deleted should be processed first.
-		//Consider these relation definitions:
-		//
-		// 'messagesCustomer' => array('type'=>self::HAS_MANY, 'model'=>'GO\Tickets\Model\Message', 'field'=>'ticket_id', 'findParams'=>FindParams::newInstance()->order('id','DESC')->select('t.*')->criteria(FindCriteria::newInstance()->addCondition('is_note', 0))),
-		// 'messagesNotes' => array('type'=>self::HAS_MANY, 'model'=>'GO\Tickets\Model\Message', 'field'=>'ticket_id', 'findParams'=>FindParams::newInstance()->order('id','DESC')->select('t.*')->criteria(FindCriteria::newInstance()->addCondition('is_note', 0))),
-		// 'messages' => array('type'=>self::HAS_MANY, 'model'=>'GO\Tickets\Model\Message', 'field'=>'ticket_id','delete'=>true, 'findParams'=>FindParams::newInstance()->order('id','DESC')->select('t.*')),
-		//
-		// messagesCustomer and messagesNotes are just subsets of the messages
-		// relation that must all be deleted anyway. We don't want to clear foreign keys first and then fail to delete them.
 
 		foreach($r as $name => $attr){
 			if(empty($attr['delete'])){
@@ -4313,8 +4117,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 		}elseif($this->_relationExists($name)){
 				return $this->_getRelated($name);
 		}else{
-//					if(!isset($this->columns[$name]))
-//					return null;
 			return parent::__get($name);
 		}
 	}
@@ -4375,13 +4177,11 @@ abstract class ActiveRecord extends \GO\Base\Model{
 	public function __call($name,$parameters)
 	{
 		//todo find relation
-
-    $extraFindParams=isset($parameters[0]) ?$parameters[0] : array();
+	    $extraFindParams=isset($parameters[0]) ?$parameters[0] : array();
 		if($this->_relationExists($name))
 			return $this->_getRelated($name,$extraFindParams);
 		else
 			throw new \Exception("function {$this->className()}:$name does not exist");
-		//return parent::__call($name,$parameters);
 	}
 
 	/**
@@ -4398,7 +4198,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 
 	public function __isset($name){
 		return isset($this->_attributes[$name]) ||
-						//isset($this->columns[$name]) || MS: removed this because it returns true when attribute is null. This might break something but it shouldn't return true.
 						($this->_relationExists($name) && $this->_getRelated($name)) ||
 						parent::__isset($name);
 	}
@@ -4481,10 +4280,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 	 */
 	public function setAttribute($name,$value, $format=false)
 	{
-//		TODO
-//		if($this->_isStaticModel) {
-//			throw new \Exception("Don't set on static model!");
-//		}
 		if($this->loadingFromDatabase){
 			//skip fancy features when loading from the database.
 			$this->_attributes[$name]=$value;
@@ -4613,31 +4408,7 @@ abstract class ActiveRecord extends \GO\Base\Model{
 		$stmt = $this->getDbConnection()->query($sql);
 		return $stmt->fetchColumn(0);
 	}
-//
-//	/**
-//	 * Update folder_id or description of a link
-//	 *
-//	 * @param ActiveRecord $model
-//	 * @param array $attributes
-//	 * @return boolean
-//	 */
-//	public function updateLink(ActiveRecord $model, array $attributes){
-//		$sql = "UPDATE `go_links_".$this->tableName()."`";
-//
-//		$updates=array();
-//		$bindParams=array();
-//		foreach($attributes as $field=>$value){
-//			$updates[] = "`$field`=:".$field;
-//			$bindParams[':'.$field]=$value;
-//		}
-//
-//		$sql .= "SET ".implode(',',$updates).
-//			" WHERE model_type_id=".$model->modelTypeId()." AND model_id=".$model->id;
-//
-//		$result = $this->getDbConnection()->prepare($sql);
-//		return $result->execute($bindParams);
-//	}
-//
+
 	/**
 	 * Unlink a model from this model
 	 *
@@ -4691,12 +4462,7 @@ abstract class ActiveRecord extends \GO\Base\Model{
 		
 		return \go\core\App::get()->getDbConnection()->delete('core_link', $reverse)->execute();
 	}
-//
-//	protected function afterUnlink(ActiveRecord $model){
-//
-//		return true;
-//	}
-//
+
 	/**
 	 * Get the number of links this model has to other models.
 	 *
@@ -4840,8 +4606,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 	 * Generally this is called by r=maintenance/checkDabase
 	 */
 	public function checkDatabase(){
-		//$this->save();
-
 		echo "Checking ".(is_array($this->pk)?implode(',',$this->pk):$this->pk)." ".$this->className()."\n";
 		flush();
 
@@ -4892,7 +4656,7 @@ abstract class ActiveRecord extends \GO\Base\Model{
 
 			if(ob_get_level() > 0) ob_flush();
 			flush();
-			
+
 			$entityTypeId = static::entityType()->getId();
 
 			echo "Deleting old values\n";
@@ -4968,7 +4732,7 @@ abstract class ActiveRecord extends \GO\Base\Model{
 
 			if(ob_get_level() > 0) ob_flush();
 			flush();
-			
+
 		}
 	}
 
@@ -5005,9 +4769,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 			return false;
 		}
 
-//		foreach($attributes as $key=>$value) {
-//			$copy->$key = $value;
-//		}
 		$copy->setAttributes($attributes, false);
 
 		//Generate new acl for this model
@@ -5077,8 +4838,6 @@ abstract class ActiveRecord extends \GO\Base\Model{
 
 			//set new foreign key
 			$attributes[$field]=$duplicate->pk;
-
-//			var_dump(array_merge($model->getAttributes('raw'),$attributes));
 
 			$duplicateRelatedModel = $model->duplicate($attributes, true, true);
 

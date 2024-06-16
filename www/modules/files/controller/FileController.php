@@ -189,7 +189,7 @@ class FileController extends \GO\Base\Controller\AbstractModelController {
 	
 	protected function afterDisplay(&$response, &$model, &$params) {
 
-		$response['data']['path'] = $model->path;
+		$response['data']['path'] = htmlspecialchars($model->path);
 		$response['data']['size'] = $model->fsFile->size();
 		$response['data']['extension'] = strtolower($model->fsFile->extension());
 		$response['data']['type'] = \GO::t($response['data']['extension'], 'base', 'filetypes');
@@ -556,7 +556,7 @@ class FileController extends \GO\Base\Controller\AbstractModelController {
 	 * - int template_id: id of used template
 	 * - int alias_id: id of alias to mail from
 	 * - string content_type : html | plain  
-	 * @return StringHelper Json response
+	 * @return string Json response
 	 */
 	protected function actionEmailDownloadLink($params){
 		$msgController = new MessageController();

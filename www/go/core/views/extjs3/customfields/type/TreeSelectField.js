@@ -17,7 +17,13 @@ go.customfields.type.TreeSelectField = Ext.extend(Ext.Container, {
 
 		this.addEvents('select');
 
-		first = this.createCombo(this.customfield.dataType.options);
+		const options = structuredClone(this.customfield.dataType.options);
+
+		options.unshift({
+			id: null, fieldId: this.customfield.id, text: "--", options: [], parentId: null, enabled: true
+		});
+
+		first = this.createCombo(options);
 		first.allowBlank = this.allowBlank;
 		first.conditionallyHidden = this.conditionallyHidden;
 		first.conditionallyRequired = this.conditionallyRequired;
@@ -95,7 +101,9 @@ go.customfields.type.TreeSelectField = Ext.extend(Ext.Container, {
 				select: this.onSelect,
 				beforeselect: this.onBeforeSelect,
 				change: this.onChange,
-				setvalue: this.onChange // to hide conditional fields on select (also when in lazy render tab)
+				setvalue: () => {
+					this.fireEvent('change', this, this.getValue());
+				} // to hide conditional fields on select (also when in lazy render tab)
 			}
 		};
 	},

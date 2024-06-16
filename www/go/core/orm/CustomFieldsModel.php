@@ -5,6 +5,7 @@ use ArrayAccess;
 use GO\Base\Db\ActiveRecord;
 use go\core\App;
 use go\core\data\ArrayableInterface;
+use go\core\db\DbException;
 use go\core\db\Query;
 use go\core\db\Table;
 use go\core\db\Utils;
@@ -421,9 +422,14 @@ class CustomFieldsModel implements ArrayableInterface, ArrayAccess, JsonSerializ
 			}
 
 			return true;
-		} catch(PDOException $e) {
-			$uniqueKey = Utils::isUniqueKeyException($e);
+		} catch(DbException $e) {
+			$uniqueKey = $e->isUniqueKeyException();
 			if ($uniqueKey) {
+				$table = Table::getInstance($this->customFieldsTableName());
+				$index = $table->getIndex($uniqueKey);
+				if ($index) {
+					$uniqueKey =$index['Column_name'];
+				}
 				$this->entity->setValidationError('customFields.' . $uniqueKey, ErrorCode::UNIQUE);
 				return false;
 			} else {

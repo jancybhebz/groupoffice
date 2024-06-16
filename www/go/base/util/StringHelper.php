@@ -22,6 +22,7 @@
 namespace GO\Base\Util;
 
 
+use Exception;
 use go\core\ErrorHandler;
 use go\core\util\StringUtil;
 
@@ -116,7 +117,7 @@ class StringHelper {
 				return $converted;
 			}else
 			{
-				throw new \Exception("Could not convert string to ASCII");
+				throw new Exception("Could not convert string to ASCII");
 			}							
 		}
 		//return preg_replace('/[^a-zA-Z0-9 ,-:_]+/','',$string);
@@ -164,8 +165,8 @@ class StringHelper {
 	 * If charset is not set, function defaults to default_charset.
 	 * $default_charset global must be set correctly if $charset is
 	 * not used.
-	 * @param StringHelper $string tested string
-	 * @param StringHelper $charset charset used in a string
+	 * @param string $string tested string
+	 * @param string $charset charset used in a string
 	 * @return bool true if 8bit symbols are detected
 	 */
 	public static function is8bit($string, $charset = 'UTF-8') {
@@ -229,8 +230,8 @@ class StringHelper {
 	 * since 1.4.6 and 1.5.1.
 	 *
 	 * @since 1.4.4 and 1.5.0
-	 * @param StringHelper $charset Name of charset
-	 * @return StringHelper $charset Adjusted name of charset
+	 * @param string $charset Name of charset
+	 * @return string $charset Adjusted name of charset
 	 */
 	public static function fixCharset($charset) {
 	
@@ -286,7 +287,7 @@ class StringHelper {
 	/**
 	 * Check if string has UTF8 characters
 	 * 
-	 * @param StringHelper $str
+	 * @param string $str
 	 * @return boolean
 	 */
 	public static function isUtf8($str) : bool{
@@ -296,11 +297,11 @@ class StringHelper {
 	/**
 	 * Replace a string within a string once.
 	 *
-	 * @param StringHelper $search
-	 * @param StringHelper $replace
-	 * @param StringHelper $subject
+	 * @param string $search
+	 * @param string $replace
+	 * @param string $subject
 	 * @param bool $found Pass this to check if an occurence was replaced or not
-	 * @return StringHelper
+	 * @return string
 	 */
 
 	public static function replaceOnce($search, $replace, $subject, &$found=false) {
@@ -310,8 +311,8 @@ class StringHelper {
 	/**
 	 * Reverse strpos. couldn't get PHP strrpos to work with offset
 	 *
-	 * @param StringHelper $haystack
-	 * @param StringHelper $needle
+	 * @param string $haystack
+	 * @param string $needle
 	 * @param int $offset
 	 * @return int
 	 */
@@ -391,7 +392,7 @@ class StringHelper {
 	 *
 	 * @param	StringHelper $html A HTML formatted string
 	 * @access public
-	 * @return StringHelper HTML formated string
+	 * @return string HTML formated string
 	 */
 
 	public static function get_html_body($html) {
@@ -476,7 +477,7 @@ class StringHelper {
 	 *
 	 * @param	StringHelper $input Any string
 	 * @access public
-	 * @return StringHelper
+	 * @return string
 	 */
 	public static function empty_to_stripe($input) {
 		if ($input == "") {
@@ -489,8 +490,8 @@ class StringHelper {
 	/**
 	 * Formats a name in Group-Office
 	 *
-	 * @param StringHelper $sort_name string Vlaue can be last_name or first_name
-	 * @return StringHelper base64 encoded string
+	 * @param string $sort_name string Vlaue can be last_name or first_name
+	 * @return string base64 encoded string
 	 */
 	public static function format_name($last, $first = '', $middle = '', $sort_name='') {
 
@@ -532,7 +533,7 @@ class StringHelper {
 	 * @param	StringHelper $string The string to chop
 	 * @param	int $maxlength The maximum number of characters in the string
 	 * @access public
-	 * @return StringHelper
+	 * @return string
 	 */
 
 	public static function cut_string($string, $maxlength, $cut_whole_words = true, $append='...') {
@@ -566,7 +567,7 @@ class StringHelper {
 	 *
 	 * @param $string
 	 * @param $maxlines
-	 * @return StringHelper
+	 * @return string
 	 */
 	public static function limit_lines($string,$maxlines)
 	{
@@ -579,85 +580,6 @@ class StringHelper {
 			$new_string .= "\n...";
 		}
 		return $new_string;
-	}
-
-
-
-
-
-	/**
-	 * Convert an enriched formated string to HTML format
-	 *
-	 * @param	StringHelper $enriched Enriched formatted string
-	 * @access public
-	 * @return StringHelper HTML formated string
-	 */
-	public static function enriched_to_html($enriched, $convert_links=true) {
-
-		// We add space at the beginning and end of the string as it will
-		// make some regular expression checks later much easier (so we
-		// don't have to worry about start/end of line characters)
-		$enriched = ' '.$enriched.' ';
-
-		// Get color parameters into a more useable format.
-		$enriched = preg_replace('/<color><param>([\da-fA-F]+),([\da-fA-F]+),([\da-fA-F]+)<\/param>/Uis', '<color r=\1 g=\2 b=\3>', $enriched);
-		$enriched = preg_replace('/<color><param>(red|blue|green|yellow|cyan|magenta|black|white)<\/param>/Uis', '<color n=\1>', $enriched);
-
-		// Get font family parameters into a more useable format.
-		$enriched = preg_replace('/<fontfamily><param>(\w+)<\/param>/Uis', '<fontfamily f=\1>', $enriched);
-
-		// Single line breaks become spaces, double line breaks are a
-		// real break. This needs to do <nofill> tracking to be
-		// compliant but we don't want to deal with state at this
-		// time, so we fake it some day we should rewrite this to
-		// handle <nofill> correctly.
-		$enriched = preg_replace('/([^\n])\r\n([^\r])/', '\1 \2', $enriched);
-		$enriched = preg_replace('/(\r\n)\r\n/', '\1', $enriched);
-
-		// We try to protect against bad stuff here.
-		$enriched = @ htmlspecialchars($enriched, ENT_QUOTES);
-
-		// Now convert the known tags to html. Try to remove any tag
-		// parameters to stop people from trying to pull a fast one
-		$enriched = preg_replace('/(?<!&lt;)&lt;bold.*&gt;(.*)&lt;\/bold&gt;/Uis', '<span style="font-weight: bold">\1</span>', $enriched);
-		$enriched = preg_replace('/(?<!&lt;)&lt;italic.*&gt;(.*)&lt;\/italic&gt;/Uis', '<span style="font-style: italic">\1</span>', $enriched);
-		$enriched = preg_replace('/(?<!&lt;)&lt;underline.*&gt;(.*)&lt;\/underline&gt;/Uis', '<span style="text-decoration: underline">\1</span>', $enriched);
-		$enriched = preg_replace_callback('/(?<!&lt;)&lt;color r=([\da-fA-F]+) g=([\da-fA-F]+) b=([\da-fA-F]+)&gt;(.*)&lt;\/color&gt;/Uis', create_function('$colors',
-		'for ($i = 1; $i < 4; $i ++) {
-			$colors[$i] = sprintf(\'%02X\', round(hexdec($colors[$i]) / 255));
-		}
-		return \'<span style="color: #\'.$colors[1].$colors[2].$colors[3].\'">\'.$colors[4].\'</span>\';'), $enriched);
-		$enriched = preg_replace('/(?<!&lt;)&lt;color n=(red|blue|green|yellow|cyan|magenta|black|white)&gt;(.*)&lt;\/color&gt;/Uis', '<span style="color: \1">\2</span>', $enriched);
-		$enriched = preg_replace('/(?<!&lt;)&lt;fontfamily&gt;(.*)&lt;\/fontfamily&gt;/Uis', '\1', $enriched);
-		$enriched = preg_replace('/(?<!&lt;)&lt;fontfamily f=(\w+)&gt;(.*)&lt;\/fontfamily&gt;/Uis', '<span style="font-family: \1">\2</span>', $enriched);
-		$enriched = preg_replace('/(?<!&lt;)&lt;smaller.*&gt;/Uis', '<span style="font-size: smaller">', $enriched);
-		$enriched = preg_replace('/(?<!&lt;)&lt;\/smaller&gt;/Uis', '</span>', $enriched);
-		$enriched = preg_replace('/(?<!&lt;)&lt;bigger.*&gt;/Uis', '<span style="font-size: larger">', $enriched);
-		$enriched = preg_replace('/(?<!&lt;)&lt;\/bigger&gt;/Uis', '</span>', $enriched);
-		$enriched = preg_replace('/(?<!&lt;)&lt;fixed.*&gt;(.*)&lt;\/fixed&gt;/Uis', '<font face="fixed">\1</font>', $enriched);
-		$enriched = preg_replace('/(?<!&lt;)&lt;center.*&gt;(.*)&lt;\/center&gt;/Uis', '<div align="center">\1</div>', $enriched);
-		$enriched = preg_replace('/(?<!&lt;)&lt;flushleft.*&gt;(.*)&lt;\/flushleft&gt;/Uis', '<div align="left">\1</div>', $enriched);
-		$enriched = preg_replace('/(?<!&lt;)&lt;flushright.*&gt;(.*)&lt;\/flushright&gt;/Uis', '<div align="right">\1</div>', $enriched);
-		$enriched = preg_replace('/(?<!&lt;)&lt;flushboth.*&gt;(.*)&lt;\/flushboth&gt;/Uis', '<div align="justify">\1</div>', $enriched);
-		$enriched = preg_replace('/(?<!&lt;)&lt;paraindent.*&gt;(.*)&lt;\/paraindent&gt;/Uis', '<blockquote>\1</blockquote>', $enriched);
-		$enriched = preg_replace('/(?<!&lt;)&lt;excerpt.*&gt;(.*)&lt;\/excerpt&gt;/Uis', '<blockquote>\1</blockquote>', $enriched);
-
-		// Now we remove the leading/trailing space we added at the
-		// start.
-		$enriched = preg_replace('/^ (.*) $/s', '\1', $enriched);
-
-		if($convert_links)
-		{
-			$enriched = preg_replace("/(?:^|\b)(((http(s?):\/\/)|(www\.-))([\w\.-]+)([,:;%#&\/?=\w+\.\-@]+))(?:\b|$)/is", "<a href=\"http$4://$5$6$7\" target=\"_blank\" class=\"blue\">$1</a>", $enriched);
-			$enriched = preg_replace("/(\A|\s)([\w\.\-]+)(@)([\w\.-]+)([A-Za-z]{2,4})\b/i", "\\1<a href=\"mailto:\\2\\3\\4\\5\" class=\"blue\">\\2\\3\\4\\5</a>", $enriched);
-		}
-
-		$enriched = nl2br($enriched);
-		$enriched = str_replace("\r", "", $enriched);
-		$enriched = str_replace("\n", "", $enriched);
-
-		return $enriched;
-
 	}
 
 
@@ -705,130 +627,7 @@ class StringHelper {
 		return $htmlToText->get_text($link_list);
 	}
 
-	private static function extractStyles($html, $prefix) {
 
-		preg_match_all("'<style[^>]*>(.*?)</style>'usi", $html, $matches);
-		$css = "";
-		for($i = 0, $l = count($matches[0]); $i < $l; $i++) {
-
-			//don't add the style added by group-office inline because it will double up.
-			if(!strstr($matches[0][$i], 'groupoffice-email-style')) {
-				$tmpCss = $matches[1][$i];
-				$tmpCss = preg_replace(["'<!--'", "'-->'"], "", $tmpCss);
-				$css .= $tmpCss. "\n\n"; // $matches[1][$i]
-			}
-		}
-
-		$style = self::prefixCSSSelectors($css, '.'.$prefix);
-
-		//apply body style on root element
-		$bodyStyle = self::extractBodyStyle($html);
-		if(!empty($bodyStyle)) {
-			$style = '.'.$prefix . ' {' . $bodyStyle . "};\n";
-		}
-
-		return $style;
-	}
-
-	private static function prefixCSSSelectors(string $css, string $prefix = '.go-html-formatted')
-	{
-		# Wipe all block comments
-		$css = preg_replace('!/\*.*?\*/!s', '', $css);
-
-		$parts = explode('}', $css);
-		$keyframeStarted = false;
-		$mediaQueryStarted = false;
-
-		foreach($parts as $key => &$part) {
-			$part = trim($part); # Wht not trim immediately .. ?
-			if(empty($part)) {
-				$keyframeStarted = false;
-				continue;
-			} else { # This else is also required
-				$partDetails = explode('{', $part);
-
-				if (strpos($part, 'keyframes') !== false) {
-					$keyframeStarted = true;
-					continue;
-				}
-
-				if($keyframeStarted) {
-					continue;
-				}
-
-				if(substr_count($part, "{")==2) {
-					$mediaQuery = $partDetails[0]."{";
-					$partDetails[0] = $partDetails[1];
-					$mediaQueryStarted = true;
-				}
-
-				$subParts = explode(',', $partDetails[0]);
-				foreach($subParts as &$subPart) {
-					if(trim($subPart)==="@font-face") {
-						continue;
-					} else {
-						$subPart = $prefix . ' ' . trim($subPart);
-					}
-				}
-
-				if(substr_count($part,"{")==2) {
-					$part = $mediaQuery."\n".implode(', ', $subParts)."{".$partDetails[2];
-				} elseif(empty($part[0]) && $mediaQueryStarted) {
-					$mediaQueryStarted = false;
-					// Shitty CSS. Looking at you, Outlook...
-					if(count($partDetails) < 3) {
-						continue;
-					}
-
-					$part = implode(', ', $subParts)."{".$partDetails[2]."}\n"; //finish media query
-				} else {
-					if(isset($partDetails[1])) {
-						# Sometimes, without this check,
-						# there is an error-notice, we don't need that..
-						$part = implode(', ', $subParts)."{".$partDetails[1];
-					}
-				}
-
-				unset($partDetails, $mediaQuery, $subParts); # Kill those three ..
-			}
-			unset($part); # Kill this one as well
-		}
-
-		# Finish with the whole new prefixed string/file in one line
-		return(preg_replace('/\s+/',' ',implode("} ", $parts)));
-
-	}
-
-	private static function extractBodyStyle($html) {
-		$style = "";
-
-		if(!preg_match("'<body [^>]*>'usi", $html, $matches)) {
-			return $style;
-		}
-
-		try {
-			$d = new \DOMDocument();
-			$d->loadHTML("<html>" . $matches[0] . '</body></html>');
-			$bodyEls = $d->getElementsByTagName('body');
-			if(!$bodyEls->length) {
-				return $style;
-			}
-			$bodyEl = $bodyEls->item(0);
-		} catch (\Exception $e) {
-			ErrorHandler::logException($e);
-			return $style;
-		}
-
-		if($bodyEl->hasAttribute("bgcolor")) {
-			$style .= "background-color: " . $bodyEl->getAttribute("bgcolor").";";
-		}
-
-		if($bodyEl->hasAttribute("style")) {
-			$style .= $bodyEl->getAttribute("style");
-		}
-
-		return $style;
-	}
 
 	/**
 	 * Convert Dangerous HTML to safe HTML for display inside of Group-Office
@@ -836,105 +635,15 @@ class StringHelper {
 	 * This also removes everything outside the body and replaces mailto links
 	 *
 	 * @todo do this all client side in the next email module. Using DomParser api?
-	 * @param	string $text Plain text string
+	 * @param	string $html Plain text string
 	 * @access public
-	 * @return StringHelper HTML formatted string
+	 * @return string HTML formatted string
 	 */
 	public static function sanitizeHtml($html, $preserveHtmlStyle = true) {
-		//needed for very large strings when data is embedded in the html with an img tag
-		ini_set('pcre.backtrack_limit',  2000000 );
-
-
-		//remove strange white spaces in tags first
-		//sometimes things like this happen <style> </ style >
-		$html = preg_replace("'</[\s]*([\w]*)[\s]*>'u","</$1>", $html);
-
-		// extract style before removing comments because sometimes style is wrapped in a comment
-		// <style><!-- body{} --></style>
-		if($preserveHtmlStyle) {
-			$prefix = 'groupoffice-msg-' . uniqid();
-			$styles = self::extractStyles($html, $prefix);
-		}
-
-		// remove comments because they might interfere. Some commands  in style tags may be improperly formatted
-		// because the user appears to paste from Word
-		$html = preg_replace(["'<style>[\s]*<!--'u", "'-->[\s*]</style>'u"], ['<style>','</style>'], $html);
-		$html = preg_replace("'<!--.*-->'Uusi", "", $html);
-		$html = preg_replace('!/\*.*?\*/!s', '', $html);
-
-		$to_removed_array = array (
-		"'<!DOCTYPE[^>]*>'usi",
-		"'<html[^>]*>'usi",
-		"'</html>'usi",
-		"'<body[^>]*>'usi",
-		"'</body>'usi",
-		"'<meta[^>]*>'usi",
-		"'<link[^>]*>'usi",
-		"'<title[^>]*>.*?</title>'usi",
-//		"'<head[^>]*>.*?</head>'usi", //Amazon had body inside the head !?
-		"'<head[^>]*>'usi",
-			"'</head[^>]*>'usi",
-		"'<base[^>]*>'usi",
-		"'<meta[^>]*>'usi",
-		"'<bgsound[^>]*>'usi",
-		
-		/* MS Word junk */
-		"'<xml[^>]*>.*?</xml>'usi",
-		"'<\/?o:[^>]*>'usi",
-		"'<\/?v:[^>]*>'usi",
-		"'<\/?st1:[^>]*>'usi",
-		"'<\?xml[^>]*>'usi",
-
-		"'<style[^>]*>.*?</style>'usi",
-		"'<script[^>]*>.*?</script>'usi",
-		"'<iframe[^>]*>.*?</iframe>'usi",
-		"'<object[^>]*>.*?</object>'usi",
-		"'<embed[^>]*>.*?</embed>'usi",
-		"'<applet[^>]*>.*?</applet>'usi",
-		"'<form[^>]*>'usi",
-		//"'<input[^>]*>'usi",
-		//"'<select[^>]*>.*?</select>'usi",
-		//"'<textarea[^>]*>.*?</textarea>'usi",
-		"'</form>'usi",
-
-		);
-
-//		 $html = "<div onclick=\"yo\" online='1' test='onclick' onclick=\"yo\"></div>\n\n\n" . $html;
-
-		$html = preg_replace($to_removed_array, '', $html);
-		//Remove any attribute starting with "on" or xmlns. Had to do this always because many mails contain weird tags like online="1".
-		//These were detected as xss attacks by detectXSS().
-
-//		$regex = '#(<[^>\s]*)\s(?:on|xmlns)[^>\s]+#iu';
-//		preg_match_all($regex, $html, $matched_tags, PREG_SET_ORDER);
-//		preg_replace($regex, '$1', $html);
-
-		$html = preg_replace_callback('#<([^>]+)>#u', function($matches) {
-			return "<" . preg_replace('#\s(?:on|xmlns)[^\s]+#iu', "", $matches[1]) . ">";
-		}, $html);
-
-
-		//remove high z-indexes
-		$matched_tags = array();
-		preg_match_all( "/(z-index)[\s]*:[\s]*([0-9]+)[\s]*/u", $html, $matched_tags, PREG_SET_ORDER );
-		foreach ($matched_tags as $tag) {
-			if ($tag[2]>8000) {
-				$html = str_replace($tag[0],'z-index:8000',$html);
-			}
-		}
-		
+		$html = StringUtil::sanitizeHtml($html, $preserveHtmlStyle);
 		// Check for smilies to be enabled by the user (settings->Look & feel-> Show Smilies)
-		if(\GO::user() && \GO::user()->show_smilies)
+		if(go()->getUserId() && go()->getAuthState()->getUser(['show_smilies'])->show_smilies)
 			$html = StringHelper::replaceEmoticons($html,true);
-
-		if(!empty($styles)) {
-			$html = '<style id="groupoffice-extracted-style">' . $styles . '</style><div class="msg '.$prefix.'">'. $html .'</div>';
-		} else if($preserveHtmlStyle) {
-			$html = trim($html);
-			if(substr($html,0, 17) !== '<div class="msg">') {
-				$html = '<div class="msg">'. $html .'</div>';
-			}
-		}
 
 		return $html;
 	}
@@ -951,12 +660,12 @@ class StringHelper {
 		}
 		return htmlspecialchars($str, ENT_QUOTES, 'UTF-8');		
 	}
-	
+
 	/**
 	 * Convert text to emoticons
 	 *
-	 * @param StringHelper $string String without emoticons
-	 * @return StringHelper String with emoticons
+	 * @param string $string String without emoticons
+	 * @return string String with emoticons
 	 */
 	public static function replaceEmoticons($string, $html = false) {
 
@@ -1022,14 +731,15 @@ class StringHelper {
 		}
 		return $string;
 	}
-	
+
 	/**
 	 * Replace string in html. It will leave strings inside html tags alone.
-	 * 
-	 * @param StringHelper $search
-	 * @param StringHelper $replacement
-	 * @param StringHelper $html
-	 * @return StringHelper 
+	 *
+	 * @param string $search
+	 * @param string $replacement
+	 * @param string $html
+	 * @return string
+	 * @throws Exception
 	 */
 	public static function htmlReplace($search, $replacement, $html){
     $html = preg_replace_callback('/<[^>]*('.preg_quote($search).')[^>]*>/uis',array('GO\Base\Util\StringHelper', '_replaceInTags'), $html);
@@ -1045,8 +755,8 @@ class StringHelper {
 	/**
 	 * Private callback function for htmlReplace.
 	 * 
-	 * @param type $matches
-	 * @return type 
+	 * @param array $matches
+	 * @return string
 	 */
   public static function _replaceInTags($matches)
   {
@@ -1067,8 +777,8 @@ class StringHelper {
 	/**
 	 * Filter possible XSS attacks
 	 * 
-	 * @param StringHelper $data;
-	 * @return StringHelper
+	 * @param string $data;
+	 * @return string
 	 */
 	public static function filterXSS($data)
 	{
@@ -1107,7 +817,7 @@ class StringHelper {
 	 *
 	 * @param	StringHelper $text Plain text string
 	 * @access public
-	 * @return StringHelper HTML formatted string
+	 * @return string HTML formatted string
 	 */
 
 	public static function convertLinks($html)
@@ -1144,19 +854,6 @@ class StringHelper {
 		return $html;
 	}
 
-
-	/**
-	 * Quotes a string with >
-	 *
-	 * @param	StringHelper $text
-	 * @access public
-	 * @return StringHelper A string quoted with >
-	 */
-	public static function quote($text) {
-		$text = "> ".ereg_replace("\n", "\n> ", trim($text));
-		return ($text);
-	}
-
 	/**
 	 * This function generates a randomized password.
 	 *
@@ -1168,7 +865,7 @@ class StringHelper {
 	 * @param string|null  $characters_disallow
 	 *
 	 * @return string
-	 * @throws \Exception
+	 * @throws Exception
 	 */
 	static function randomPassword(?int $password_length = 0, ?string $characters_allow = 'a-z,1-9', ?string $characters_disallow = 'i,o' ): string
 	{
@@ -1231,8 +928,8 @@ class StringHelper {
 	 *
 	 * @access static
 	 *
-	 * @param StringHelper $template
-	 * @param StringHelper $objectarray
+	 * @param string $template
+	 * @param string $objectarray
 	 *
 	 * @return $objectarray
 	 */
@@ -1257,7 +954,7 @@ class StringHelper {
 	/**
 	 * Check the length of a string. Works with UTF8 too.
 	 * 
-	 * @param StringHelper $str
+	 * @param string $str
 	 * @return int 
 	 */
 	public static function length($str){
@@ -1272,8 +969,8 @@ class StringHelper {
 	/**
 	 * Encode an url but leave the forward slashes alone
 	 * 
-	 * @param StringHelper $str
-	 * @return StringHelper
+	 * @param string $str
+	 * @return string
 	 */
 	public static function rawurlencodeWithourSlash($str){
 		$parts = explode('/', $str);

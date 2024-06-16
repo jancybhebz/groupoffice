@@ -57,9 +57,13 @@ class UserSettings extends Property {
 		if(AddresBookModuleSettings::get()->createPersonalAddressBooks){
 			$addressBook = AddressBook::find()->where('createdBy', '=', $this->userId)->single();
 			if(!$addressBook) {
+				$user = User::findById($this->userId, ['displayName', 'enabled']);
+				if(!$user || !$user->enabled) {
+					return null;
+				}
 				$addressBook = new AddressBook();
 				$addressBook->createdBy = $this->userId;
-				$addressBook->name = User::findById($this->userId, ['displayName'])->displayName;
+				$addressBook->name = $user->displayName;
 				if(!$addressBook->save()) {
 					throw new SaveException($addressBook);
 				}
@@ -88,7 +92,7 @@ class UserSettings extends Property {
 
 
 	public function getSortBy() {
-		return User::findById($this->userId, ['sort_name'])->sort_name == 'first_name' ? 'name' : 'lastName';
+		return isset($this->userId) ? (User::findById($this->userId, ['sort_name'])->sort_name == 'first_name' ? 'name' : 'lastName') : 'name';
 	}
 
 	

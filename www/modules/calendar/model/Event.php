@@ -265,7 +265,7 @@ class Event extends \GO\Base\Db\ActiveRecord {
 	/**
 	 * Get the color for the current status of this event
 	 * 
-	 * @return StringHelper 
+	 * @return string 
 	 */
 	public function getStatusColor(){
 		
@@ -443,48 +443,51 @@ class Event extends \GO\Base\Db\ActiveRecord {
 		$freeBusyInstalled = \GO::modules()->isInstalled("freebusypermissions");
 		
 		foreach($stmt as $event){
-			
+
 			if($freeBusyInstalled && !$event->calendar->checkPermissionlevel(\GO\Base\Model\Acl::WRITE_PERMISSION) && !\GO\Freebusypermissions\FreebusypermissionsModule::hasFreebusyAccess(\GO::user()->id, $event->calendar->user_id)) {
 				//no permission to update
 				continue;
 			}
-			
+
 			//workaround for old events that don't have the exception ID set. In this case
 			//getRelatedParticipantEvents fails. This won't happen with new events
 			if(!$event->isRecurring())
 				continue;
-			
-			\GO::debug("Creating exception for related participant event ".$event->name." (".$event->id.") ".date('c', $exceptionDate));
-			
-			$exceptionEvent = $event->getExceptionEvent($exceptionDate);
-			$exceptionEvent->dontSendEmails = $dontSendEmails;
-			$exceptionEvent->setAttributes($attributes);
-			if(!$exceptionEvent->save())
-				throw new \Exception("Could not create exception: ".var_export($exceptionEvent->getValidationErrors(), true));
-			
 
-			$event->copyLinks($exceptionEvent);
-			
-			$event->addException($exceptionDate, $exceptionEvent->id);
 
+			$existing = Event::model()->findByUuid($event->uuid, 0, $event->calendar_id, $exceptionDate);
+
+			if(!$existing) {
+				\GO::debug("Creating exception for related participant event ".$event->name." (".$event->id.") ".date('c', $exceptionDate));
+
+				$exceptionEvent = $event->getExceptionEvent($exceptionDate);
+				$exceptionEvent->dontSendEmails = $dontSendEmails;
+				$exceptionEvent->setAttributes($attributes);
+				if (!$exceptionEvent->save())
+					throw new \Exception("Could not create exception: " . var_export($exceptionEvent->getValidationErrors(), true));
+
+
+				$event->copyLinks($exceptionEvent);
+				$event->addException($exceptionDate, $exceptionEvent->id);
 			
-			
-			
-			
-			
-			$event->duplicateRelation('participants', $exceptionEvent, array('dontCreateEvent' => true));
-			
-			
-			if(!$event->isResource() && $event->is_organizer){
-				$stmt = $event->resources();		
-				foreach($stmt as $resource){
-					$resources[]=$resource;
+				$event->duplicateRelation('participants', $exceptionEvent, array('dontCreateEvent' => true));
+
+
+				if(!$event->isResource() && $event->is_organizer){
+					$stmt = $event->resources();
+					foreach($stmt as $resource){
+						$resources[]=$resource;
+					}
+					$resourceExceptionEvent = $exceptionEvent;
 				}
-				$resourceExceptionEvent = $exceptionEvent;
+
+				if($event->id==$this->id)
+					$returnEvent=$exceptionEvent;
+
+			} else{
+				\GO::debug("NOT Creating exception for related participant event ".$event->name." (".$event->id.") ".date('c', $exceptionDate));
+
 			}
-			
-			if($event->id==$this->id)
-				$returnEvent=$exceptionEvent;
 		}
 		
 		foreach($resources as $resource){
@@ -597,6 +600,8 @@ class Event extends \GO\Base\Db\ActiveRecord {
 	protected function beforeSave() {
 		
 		GO::debug("#### EVENT BEFORE SAVE ####");
+
+		go()->getDebugger()->debugCalledFrom();
 		
 		if($this->rrule != ""){			
 			$rrule = new \GO\Base\Util\Icalendar\Rrule();
@@ -1254,8 +1259,8 @@ class Event extends \GO\Base\Db\ActiveRecord {
 	 * Create a localEvent model from this event model
 	 * 
 	 * @param Event $event
-	 * @param StringHelper $periodStartTime
-	 * @param StringHelper $periodEndTime
+	 * @param string $periodStartTime
+	 * @param string $periodEndTime
 	 * @return LocalEvent 
 	 */
 	public function getLocalEvent($event, $periodStartTime, $periodEndTime){
@@ -1270,7 +1275,7 @@ class Event extends \GO\Base\Db\ActiveRecord {
 	 * 
 	 * Optionally exceptionDate can be specified to find a specific exception.
 	 * 
-	 * @param StringHelper $uuid
+	 * @param string $uuid
 	 * @param int $user_id
 	 * @param int $calendar_id
 	 * @param int $exceptionDate
@@ -1336,7 +1341,7 @@ class Event extends \GO\Base\Db\ActiveRecord {
 	
 	/**
 	 * Get the status translated into the current language setting
-	 * @return StringHelper 
+	 * @return string 
 	 */
 	public function getLocalizedStatus(){
 		$statuses = \GO::t("statuses", "calendar");
@@ -1349,16 +1354,16 @@ class Event extends \GO\Base\Db\ActiveRecord {
 	 * Get the event in HTML markup
 	 * 
 	 * @todo Add recurrence info
-	 * @return StringHelper 
+	 * @return string 
 	 */
 	public function toHtml() {
 		$html = '<table id="event-'.$this->uuid.'">' .
 						'<tr><td>' . \GO::t("Subject", "calendar") . ':</td>' .
-						'<td>' . $this->name . '</td></tr>';
+						'<td>' . htmlspecialchars($this->name) . '</td></tr>';
 		
 		if($this->calendar){
 			$html .= '<tr><td>' . \GO::t("Calendar", "calendar") . ':</td>' .
-						'<td>' . $this->calendar->name . '</td></tr>';
+						'<td>' . htmlspecialchars($this->calendar->name) . '</td></tr>';
 		}
 		
 		$html .= '<tr><td>' . \GO::t("Starts at", "calendar") . ':</td>' .
@@ -1403,8 +1408,8 @@ class Event extends \GO\Base\Db\ActiveRecord {
 						continue;
 					}
 
-					$html .= '<tr><td style="vertical-align:top">'.($field->name).'</td>'.
-										'<td>'.$cfRecord[$field->databaseName].'</td></tr>';
+					$html .= '<tr><td style="vertical-align:top">'.htmlspecialchars($field->name).'</td>'.
+										'<td>'.htmlspecialchars($cfRecord[$field->databaseName]).'</td></tr>';
 				}
 			}
 		}
@@ -1420,7 +1425,7 @@ class Event extends \GO\Base\Db\ActiveRecord {
 			$html .= '<tr><td colspan="3"><br /></td></tr>';
 			$html .= '<tr><td><b>'.\GO::t("Participant", "calendar").'</b></td><td><b>'.\GO::t("Status", "calendar").'</b></td><td><b>'.\GO::t("Organizer", "calendar").'</b></td></tr>';
 			while($participant = $stmt->fetch()){
-				$html .= '<tr><td>'.$participant->name.'&nbsp;</td><td>'.$participant->statusName.'&nbsp;</td><td>'.($participant->is_organizer ? \GO::t("Yes") : '').'</td></tr>';
+				$html .= '<tr><td>'.htmlspecialchars($participant->name).'&nbsp;</td><td>'.$participant->statusName.'&nbsp;</td><td>'.($participant->is_organizer ? \GO::t("Yes") : '').'</td></tr>';
 			}
 			$html .='</table>';
 		}
@@ -1450,7 +1455,7 @@ class Event extends \GO\Base\Db\ActiveRecord {
 	/**
 	 * Get this event as a VObject. This can be turned into a vcalendar file data.
 	 * 
-	 * @param StringHelper $method REQUEST, REPLY or CANCEL
+	 * @param string $method REQUEST, REPLY or CANCEL
 	 * @param Participant $updateByParticipant The participant that is generating this ICS for a response.
 	 * @param int $recurrenceTime Export for a specific recurrence time for the recurrence-id. 
 	 * @param boolean $includeExdatesForMovedEvents Funambol need EXDATE lines even for appointments that have been moved. CalDAV doesn't need those lines.
@@ -1655,7 +1660,7 @@ class Event extends \GO\Base\Db\ActiveRecord {
 				$event->save(true);
 			}
 
-			$c->add($event->toVObject('REQUEST', false, $recurrenceTime));
+			$c->add($event->toVObject('REQUEST', false));
 		}
 
 
@@ -1667,7 +1672,7 @@ class Event extends \GO\Base\Db\ActiveRecord {
 	/**
 	 * Get vcalendar data for an *.ics file.
 	 * 
-	 * @param StringHelper $method REQUEST, REPLY or CANCEL
+	 * @param string $method REQUEST, REPLY or CANCEL
 	 * @param Participant $updateByParticipant The participant that is generating this ICS for a response.
 	 * @param int $recurrenceTime Export for a specific recurrence time for the recurrence-id. 
 	 * If this event is an occurence and has a exception_for_event_id it will automatically determine this value. 
@@ -1959,7 +1964,7 @@ $sub = $offset>0;
 					$this->setValidationRule('uuid', 'unique', array('calendar_id','start_time', 'exception_for_event_id'));
 				
 					
-				if(!$this->save()){	
+				if(!$this->save(true)){
 
 					if ($importExternal) {
 						$installationName = !empty(\GO::config()->title) ? \GO::config()->title : 'Group-Office';
@@ -2042,11 +2047,11 @@ The following is the error message:
 						$participant->user_id=$this->calendar->user_id;
 					}
 					
-					$participant->save();
+					$participant->save(true);
 				}else
 				{
 					$this->is_organizer=true;
-					$this->save();
+					$this->save(true);
 				}
 			}
 			
@@ -2083,7 +2088,7 @@ The following is the error message:
 				foreach ($exceptionEventsStmt as $exceptionEventModel) {
 					$exceptionEventModel->exception_for_event_id=$this->id;
 					
-					$exceptionEventModel->save();
+					$exceptionEventModel->save(true);
 					//TODO: This method only works when an exception takes place on the same day as the original occurence.
 					//We should store the RECURRENCE-ID value so we can find it later.
 					$this->addException($exceptionEventModel->start_time, $exceptionEventModel->id);
@@ -2234,7 +2239,7 @@ The following is the error message:
 	 */
 	public function createCopyForParticipant(Participant $participant){
 
-		\GO::debug("Creating event copy for ".$participant->name);
+		\GO::debug("createCopyForParticipant ".$participant->name);
 		
 		//create event in participant's default calendar if the current user has the permission to do that
 		$calendar = $participant->getDefaultCalendar();
@@ -2479,8 +2484,8 @@ The following is the error message:
 			//organizer is not a Group-Office user with event. We must send a message to him an ICS attachment
 		if($includeIcs){
 			$ics=$this->toICS("REPLY", $sendingParticipant, $recurrenceTime);				
-			$a = Attachment::fromString($ics, \GO\Base\Fs\File::stripInvalidChars($this->name) . '.ics', 'text/calendar; METHOD="REPLY;charset=utf-8"');
-			$a->setInline(true);
+			$a = Attachment::fromString($ics, \GO\Base\Fs\File::stripInvalidChars($this->name) . '.ics', 'text/calendar;method=REPLY;charset=utf-8');
+			$a->setInline(false);
 			$message->attach($a);
 			
 		}
@@ -2535,8 +2540,8 @@ The following is the error message:
 			$body = '<p>'.\GO::t("The following event has been cancelled by the organizer", "calendar").': </p>'.$this->toHtml();
 			
 				$ics=$this->toICS("CANCEL", $participant);
-				$a = Attachment::fromString($ics, \GO\Base\Fs\File::stripInvalidChars($this->name) . '.ics', 'text/calendar; METHOD="CANCEL; charset=utf8"');
-				$a->setInline(true);
+				$a = Attachment::fromString($ics, \GO\Base\Fs\File::stripInvalidChars($this->name) . '.ics', 'text/calendar;method=CANCEL;charset=utf8');
+				$a->setInline(false);
 				$message->attach($a);
 				
 			if($participantEvent){
@@ -2647,8 +2652,8 @@ The following is the error message:
 						$body .= '</div>';
 
 					$ics=$this->toICS("REQUEST");
-					$a = Attachment::fromString($ics, \GO\Base\Fs\File::stripInvalidChars($this->name) . '.ics', 'text/calendar; METHOD="REQUEST;charset=utf-8"');
-					$a->setInline(true);
+					$a = Attachment::fromString($ics, \GO\Base\Fs\File::stripInvalidChars($this->name) . '.ics', 'text/calendar;method=REQUEST;charset=utf-8');
+					$a->setInline(false);
 
 					$message->attach($a);
 

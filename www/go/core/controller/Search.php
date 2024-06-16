@@ -63,10 +63,10 @@ class Search extends EntityController {
 
 			if(isset($query)) { // try to join contact for department property
 				$query->join("addressbook_contact", "c", "c.goUserId=u.id", 'LEFT');
-				$query->select($selectQueryContact . ', "" as extra');
+				$query->select($selectQueryContact . ', c.department as extra');
 			}
 
-			$selectQuery = 'c.id as entityId, "Contact" as entity, e.email, e.type, c.name, c.department as extra, c.photoBlobId';
+			$selectQuery = 'c.id as entityId, "Contact" as entity, e.email, e.type, c.name, c.photoBlobId, c.department as extra';
 
 			if($isEmailModuleAvailable && $optionEnabled == "1") {
 				$selectQuery .= ', em.last_mail_time AS priority';

@@ -69,6 +69,8 @@ go.modules.community.tasks.TaskGrid = Ext.extend(go.grid.GridPanel, {
 				[record.data.id]: {progress: (!wasComplete ? 'completed' : 'needs-action')}}
 			}).finally(() => {
 				this.getEl().unmask();
+			}).catch(e => {
+				GO.errorDialog.show(e);
 			})
 
 		}, this);
@@ -80,8 +82,8 @@ go.modules.community.tasks.TaskGrid = Ext.extend(go.grid.GridPanel, {
 			} else if(record.data.start && record.data.start.format("Ymd") <= now) {
 				meta.css = "success";
 			}
-
-			return go.util.Format.date(v);
+			// prevent timezone to be applied twice...
+			return go.util.Format.date(record.json[meta.id]);
 		};
 
 		this.columns = [

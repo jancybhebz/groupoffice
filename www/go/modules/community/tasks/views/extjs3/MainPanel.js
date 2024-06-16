@@ -482,7 +482,7 @@ go.modules.community.tasks.MainPanel = Ext.extend(go.modules.ModulePanel, {
 	canEditTaskLists: function() {
 		if(this.support) {
 			const modRights = go.Modules.get("business", "support").userRights;
-			return modRights.mayManage;
+			return modRights.mayChangeTasklists;
 		} else {
 			return go.Modules.get("community", 'tasks') && go.Modules.get("community", 'tasks').userRights.mayChangeTasklists;
 		}
@@ -608,7 +608,7 @@ go.modules.community.tasks.MainPanel = Ext.extend(go.modules.ModulePanel, {
 										iconCls: 'filetype filetype-ics',
 										handler: function() {
 											go.util.exportToFile(
-												'Task',
+												this.support ? 'SupportTicket' : 'Task',
 												Object.assign(go.util.clone(this.taskGrid.store.baseParams), this.taskGrid.store.lastOptions.params, {limit: 0, position: 0}),
 												'ics');
 										},
@@ -618,7 +618,7 @@ go.modules.community.tasks.MainPanel = Ext.extend(go.modules.ModulePanel, {
 										iconCls: 'filetype filetype-xls',
 										handler: function() {
 											go.util.exportToFile(
-												'Task',
+												this.support ? 'SupportTicket' : 'Task',
 												Object.assign(go.util.clone(this.taskGrid.store.baseParams), this.taskGrid.store.lastOptions.params, {limit: 0, position: 0}),
 												'xlsx');
 										},
@@ -628,7 +628,7 @@ go.modules.community.tasks.MainPanel = Ext.extend(go.modules.ModulePanel, {
 										iconCls: 'filetype filetype-csv',
 										handler: function() {
 											go.util.exportToFile(
-												'Task',
+												this.support ? 'SupportTicket' : 'Task',
 												Object.assign(go.util.clone(this.taskGrid.store.baseParams), this.taskGrid.store.lastOptions.params, {limit: 0, position: 0}),
 												'csv');
 										},
@@ -638,7 +638,7 @@ go.modules.community.tasks.MainPanel = Ext.extend(go.modules.ModulePanel, {
 										iconCls: 'filetype filetype-html',
 										handler: function() {
 											go.util.exportToFile(
-												'Task',
+												this.support ? 'SupportTicket' : 'Task',
 												Object.assign(go.util.clone(this.taskGrid.store.baseParams), this.taskGrid.store.lastOptions.params, {limit: 0, position: 0}),
 												'html');
 										},

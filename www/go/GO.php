@@ -16,8 +16,6 @@
  * @package GO.base
  */
 
-use go\core\cache\Apcu;
-use go\core\jmap\State;
 use go\core\ErrorHandler;
 
 /**
@@ -60,7 +58,7 @@ class GO{
 	 * Check if a class can be used.
 	 * This function checks if the class exists and if the module for the class is installed (So the tables are available, when it's an active record)
 	 * 
-	 * @param StringHelper $className
+	 * @param string $className
 	 * @return boolean
 	 */
 	public static function classExists($className){
@@ -76,20 +74,9 @@ class GO{
 			
 		if (($module != 'base' && (!GO::modules()->isInstalled($module) || !GO::modules()->isAvailable($module))) || !class_exists($className)){
 			return false;
-		}else
-		{
+		} else {
 			return true;
 		}
-//			
-//		if(class_exists($className)){
-//			
-//			$clsParts = explode('\\',$className);
-//			
-//			if($clsParts[1] == 'Base' || GO::modules()->isInstalled(strtolower($clsParts[1])))
-//				return true;
-//		}
-//	
-//		return false;
 	}
 	
 	/**
@@ -98,7 +85,7 @@ class GO{
 	 *
 	 * It returns the old value.
 	 *
-	 * @param StringHelper $ignore
+	 * @param string $ignore
 	 * @return boolean Old value
 	 */
 	public static function setIgnoreAclPermissions($ignore=true){
@@ -230,7 +217,7 @@ class GO{
 	 * Close the database connection. Beware that all active PDO statements must be set to null too
 	 * in the current scope.
 	 * 
-	 * Wierd things happen when using fsockopen. This test case leaves the conneciton open. When removing the fputs call it seems to work.
+	 * Weird things happen when using fsockopen. This test case leaves the conneciton open. When removing the fputs call it seems to work.
 	 * 
 	 * 			
 	    \GO::session()->login('admin','admin');
@@ -302,7 +289,7 @@ class GO{
 		if(!isset(self::$_view)){
 			self::$_view = new $class();
 		}
-		return self::$_view;//isset(\GO::session()->values['view']) ? \GO::session()->values['view'] : \GO::config()->defaultView;
+		return self::$_view;
 	}
 
 	public static function setView($viewName){
@@ -363,20 +350,6 @@ class GO{
 	 */
 	public static function modules() {
 		if (!isset(self::$_modules)) {
-//			if(\GO::user()){
-//			
-//			Caching caused more problems than benefits
-//			
-//				if(isset(\GO::session()->values['modulesObject']) && !isset($GLOBALS['GO_CONFIG'])){
-//					self::$_modules=\GO::session()->values['modulesObject'];
-//				}else{
-//					self::$_modules=\GO::session()->values['modulesObject']=new \GO\Base\ModuleCollection();
-//				}
-//			}else
-//			{
-//				self::$_modules=new \GO\Base\ModuleCollection();
-//			}
-			
 			self::$_modules=new \GO\Base\ModuleCollection();
 		}
 		return self::$_modules;
@@ -409,9 +382,9 @@ class GO{
         if (!isset(self::$_cache)) {
             if(!GO::isInstalled()){
               self::$_cache=new \GO\Base\Cache\None();
-						}else{
-							self::$_cache = new \GO\Base\Cache\Apcu();
-						}
+			}else{
+				self::$_cache = new \GO\Base\Cache\Apcu();
+			}
         }
         return self::$_cache;
     }
@@ -422,24 +395,7 @@ class GO{
 	 */
 	public static function config() {
 		if (!isset(self::$_config)) {
-
-			// TODO: improve later, This will cache the same config file for a different installation if: same domain + same $token cookie
-//			if(Apcu::isSupported() && ($token = State::getClientAccessToken())) {
-//				$cacheKey = 'go_old_conf_' . $token;
-//				self::$_config = apcu_fetch($cacheKey);
-//				if(self::$_config && self::$_config->cacheTime > filemtime(self::$_config->configPath) && (!file_exists('/etc/groupoffice/globalconfig.inc.php') || self::$_config->cacheTime > filemtime('/etc/groupoffice/globalconfig.inc.php'))) {
-//					return self::$_config;
-//				}
-//			}
-
 			self::$_config = new \GO\Base\Config();
-			
-			if(isset($cacheKey)) {
-				self::$_config->cacheTime = time();
-
-				//apcu_store($cacheKey, self::$_config);
-			}
-
 			if(!empty(GO::session()->values['debug'])) {
 				go()->getDebugger()->enable();
 			}
@@ -461,12 +417,9 @@ class GO{
 	/**
 	 * The automatic class loader for Group-Office.
 	 *
-	 * @param StringHelper $className
+	 * @param string $className
 	 */
 	public static function autoload($className) {
-		
-		//for namespaces
-//		$className = str_replace('\\', '_', $className);
 		
 		//Sometimes there's a leading \ in the $className and sometimes not.
 		//Might not be true for all php versions.		
@@ -475,10 +428,7 @@ class GO{
 		if(isset(self::$_classes[$className])){
 			//don't use \GO::config()->root_path here because it might not be autoloaded yet causing an infite loop.
 			require(dirname(dirname(__FILE__)) . '/'.self::$_classes[$className]);
-		}else
-		{
-//			echo "Autoloading: ".$className."\n";
-			
+		} else {
 			$filePath = false;
 
 			if(substr($className,0,7)=='GO\\Base'){
@@ -500,7 +450,6 @@ class GO{
 				$filePath = \GO::config()->file_storage_path.'php/'.$location;	
 				
 			} else {
-				//$orgClassName = $className;
 				$forGO = substr($className,0,3)=='GO\\';
 
 				if ($forGO)
@@ -567,12 +516,6 @@ class GO{
 		}
 		self::$initialized=true;
 		
-		//register our custom error handler here
-//		set_error_handler(array('GO','errorHandler'));
-//		register_shutdown_function(array('GO','shutdown'));
-
-//   	spl_autoload_register(array('GO', 'autoload'));
-		
 		//Start session here. Important that it's called before \GO::config().
 		\GO::session();
 
@@ -615,33 +558,6 @@ class GO{
 		GO::config()->fireEvent('init');
 		
 	}
-	
-	/**
-	 * undo magic quotes if magic_quotes_gpc is enabled. It should be disabled!
-	 */
-	private static function _undoMagicQuotes(){
-		
-		if (get_magic_quotes_gpc()) {
-
-			function stripslashes_array($data) {
-				if (is_array($data)) {
-					foreach ($data as $key => $value) {
-						$data[$key] = stripslashes_array($value);
-					}
-					return $data;
-				} else {
-					return stripslashes($data);
-				}
-			}
-
-			$_REQUEST = stripslashes_array($_REQUEST);
-			$_GET = stripslashes_array($_GET);
-			$_POST = stripslashes_array($_POST);
-			$_COOKIE = stripslashes_array($_COOKIE);
-			if(isset($_FILES))
-				$_FILES = stripslashes_array($_FILES);
-		}
-	}
 
 	/**
 	 * Called when PHP exits.
@@ -667,7 +583,7 @@ class GO{
 	 * Register a callback function when an error occurs. It will be called with
 	 * the error message as string
 	 * 
-	 * @param StringHelper|array $func
+	 * @param string|array $func
 	 */
 	public static function registerErrorLogCallback($func){
 		self::$_errorLogCallbacks[]=$func;
@@ -677,8 +593,8 @@ class GO{
 	 * Custom error handler that logs to our own error log
 	 * 
 	 * @param int $errno
-	 * @param StringHelper $errstr
-	 * @param StringHelper $errfile
+	 * @param string $errstr
+	 * @param string $errfile
 	 * @param int $errline
 	 * @return boolean
 	 */
@@ -748,8 +664,7 @@ class GO{
 		$errorMsg .= "----------------";
 		
 		\GO::debug($errorMsg);
-//		\GO::logError($errorMsg);	
-		
+
 		foreach(self::$_errorLogCallbacks as $callback){
 			call_user_func($callback, $errorMsg);
 		}
@@ -767,7 +682,7 @@ class GO{
 	/**
 	 * Writes a string to the Group-Office error log
 	 * 
-	 * @param StringHelper $errorMsg
+	 * @param string $errorMsg
 	 */
 	public static function logError($errorMsg){		
 		$logDir = \GO::config()->file_storage_path . 'log';
@@ -843,7 +758,7 @@ class GO{
 		 \GO::debug("Script running at [$id] for ".$time."ms");
 	}
 	/**
-	 * Write's to a debug log.
+	 * Writes to a debug log.
 	 *
 	 * @param string $text log entry
 	 */
@@ -937,12 +852,7 @@ class GO{
 	 * @return \GO\Base\Db\ActiveRecord
 	 */
 	public static function getModel($modelName){
-		//$modelName::model() does not work on php 5.2! That's why we use this function.
-		
-		//backwards compat
-		//$modelName = str_replace('_','\\', $modelName);
-		
-		if(!class_exists($modelName)){			
+		if(!class_exists($modelName)){
 
 			$entityType = \go\core\orm\EntityType::findByName($modelName);
 			
@@ -951,8 +861,7 @@ class GO{
 			}
 			
 			$modelName = $entityType->getClassName();
-			//return $modelName;
-		} 
+		}
 		
 
 		
@@ -968,15 +877,13 @@ class GO{
 	 * 
 	 * Controller external/index will be execured.
 	 *
-	 * @param StringHelper $module
+	 * @param string $module
 	 * @param function $function
 	 * @param array $params
-	 * @return StringHelper
+	 * @return string
 	 */
 	public static function createExternalUrl($module, $function, $params,$toLoginDialog=false)
 	{
-		//$p = 'm='.urlencode($module).'&f='.urlencode($function).'&p='.urlencode(base64_encode(json_encode($params)));
-
 		if(\GO::config()->debug){
 			if(!preg_match('/[a-z]+/', $module))
 				throw new \Exception('$module param may only contain a-z characters.');
@@ -1008,11 +915,11 @@ class GO{
 	/**
 	 * Generate a controller URL.
 	 *
-	 * @param StringHelper $path To controller. eg. addressbook/contact/submit
+	 * @param string $path To controller. eg. addressbook/contact/submit
 	 * @param array $params eg. array('id'=>1,'someVar'=>'someValue')
 	 * @param boolean $relative Defaults to true. Set to false to return an absolute URL.
 	 * @param boolean $htmlspecialchars Set to true to escape special html characters. eg. & becomes &amp.
-	 * @return StringHelper
+	 * @return string
 	 * @param boolean $appendSecurityToken add a SecurityToken to the url.
 	 * @return string
 	 */
@@ -1026,8 +933,7 @@ class GO{
 
 		if(empty($path)){
 			$amp = 'index.php?';
-		}else
-		{
+		}else {
 			$url .= 'index.php?r='.$path;
 
 			$amp = $htmlspecialchars ? '&amp;' : '&';
@@ -1040,8 +946,7 @@ class GO{
 
 					$amp = $htmlspecialchars ? '&amp;' : '&';
 				}
-			}else
-			{
+			} else {
 				$url .= $amp.$params;
 			}
 		}
@@ -1057,7 +962,7 @@ class GO{
 	/**
 	 * Find classes in a folder
 	 *
-	 * @param StringHelper $path Relative from go/base
+	 * @param string $path Relative from go/base
 	 * @return \ReflectionClass[]
 	 */
 	public static function findClasses($subfolder){
@@ -1083,7 +988,7 @@ class GO{
 	/**
 	 * Find classes in a folder
 	 *
-	 * @param StringHelper $path Relative from $config['file_storage_path'].'php/'
+	 * @param string $path Relative from $config['file_storage_path'].'php/'
 	 * @return \ReflectionClass[]
 	 */
 	public static function findFsClasses($subfolder, $subClassOf=null){

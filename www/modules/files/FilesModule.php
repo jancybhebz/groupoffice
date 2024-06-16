@@ -22,6 +22,7 @@
 namespace GO\Files;
 
 use Faker\Generator;
+use go\core\model\Acl;
 use go\core\model\Group;
 use go\core\model\User;
 use go\core\util\ClassFinder;

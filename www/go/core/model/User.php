@@ -22,6 +22,7 @@ use go\core\Environment;
 use go\core\exception\ConfigurationException;
 use go\core\exception\NotFound;
 use go\core\Installer;
+use go\core\jmap\Request;
 use go\core\mail\Address;
 use go\core\mail\Message;
 use go\core\mail\Util;
@@ -45,6 +46,7 @@ use go\modules\community\notes\model\UserSettings as NotesUserSettings;
 use go\modules\community\tasks\model\Task;
 use go\modules\community\tasks\model\TaskList;
 use go\modules\community\tasks\model\UserSettings as TasksUserSettings;
+use http\Exception\InvalidArgumentException;
 
 
 /**
@@ -58,6 +60,15 @@ class User extends AclItemEntity {
 	use CustomFieldsTrait;
 
 	const ID_SUPER_ADMIN = 1;
+
+	/**
+	 * Fires when the password is verified during login via the web only.
+	 * Login might not be complete.
+	 *
+	 * @param User $user
+	 * @param string $password
+	 */
+	const EVENT_PASSWORD_VERIFIED = 'passwordverified';
 
 	/**
 	 * Fires on login
@@ -273,8 +284,8 @@ class User extends AclItemEntity {
 	public $sort_email_Addresses_by_time;
 	public $no_reminders;
 	
-	protected $last_password_change;
-	public $force_password_change;
+	protected ?DateTime $passwordModifiedAt;
+	public bool $forcePasswordChange = false;
 
 	public function getDateTimeFormat(): string
 	{
@@ -298,9 +309,14 @@ class User extends AclItemEntity {
 	 * Changed to false in setValues() so when the the jmap api is used it needs to be verified
 	 * @var bool 
 	 */
-	private $passwordVerified = true;
+	private ?bool $passwordVerified = null;
 
 	public $clients;
+
+
+	public function isPasswordVerified() : ?bool {
+		return $this->passwordVerified;
+	}
 
 	protected static function defineMapping(): Mapping
 	{
@@ -310,6 +326,23 @@ class User extends AclItemEntity {
 			->addMap('clients', Client::class, ['id' => 'userId'])
 			->addScalar('groups', 'core_user_group', ['id' => 'userId']);
 	}
+
+public function historyLog(): bool|array
+{
+	$log = parent::historyLog();
+
+	if(isset($log['password'])) {
+		if(isset($log['password'][0])) {
+			$log['password'][0] = "MASKED";
+		}
+
+		if(isset($log['password'][1])) {
+			$log['password'][1] = "MASKED";
+		}
+	}
+
+	return $log;
+}
 
 
 	/**
@@ -343,7 +376,7 @@ class User extends AclItemEntity {
 	
 	public function setValues(array $values) : Model
 	{
-		$this->passwordVerified = false;
+		$this->passwordVerified = null;
 		return parent::setValues($values);
 	}
 
@@ -398,10 +431,21 @@ class User extends AclItemEntity {
    */
 	public function setCurrentPassword($currentPassword){
 		$this->currentPassword = $currentPassword;
-		
-		if(!$this->checkPassword($currentPassword)) {
-			$this->setValidationError("currentPassword", ErrorCode::INVALID_INPUT);
-		} 
+
+		if(go()->getAuthState() && go()->getAuthState()->isAdmin()) {
+			if(!go()->getAuthState()->getUser()->checkPassword($currentPassword)) {
+				$this->passwordVerified = false;
+			}else {
+				$this->passwordVerified = true;
+			}
+		} else {
+
+			if (!$this->checkPassword($currentPassword)) {
+				$this->passwordVerified = false;
+			} else {
+				$this->passwordVerified = true;
+			}
+		}
 	}
 
   /**
@@ -430,6 +474,10 @@ class User extends AclItemEntity {
 	 */
 	public function passwordVerify(string $password): bool
 	{
+		$passwordLen = strlen($password);
+		if($passwordLen > go()->getSettings()->passwordMaxLength) {
+			return false;
+		}
 		return password_verify($password, $this->password);
 	}
 
@@ -439,10 +487,13 @@ class User extends AclItemEntity {
 		return $this->plainPassword;
 	}
 
-	public function setPassword($password) {
+	public function setPassword($password, $recoveryHashChecked = false) {
 		$this->recoveryHash = null;
 		$this->recoverySendAt = null;
 		$this->plainPassword = $password;
+		if ($recoveryHashChecked) {
+			$this->passwordVerified = true;
+		}
 	}
 
 	/**
@@ -477,7 +528,7 @@ class User extends AclItemEntity {
    * Make sure to call this when changing the password with a recovery hash
    * @param string $hash
    * @return bool
-   */
+   * @depcreated Please remove after some time as the recovery hash check was refactored in the API auth script
 	public function checkRecoveryHash(string $hash): bool
 	{
 		if($hash === $this->recoveryHash) {
@@ -487,33 +538,26 @@ class User extends AclItemEntity {
 		}
 		return false;
 	}
+  */
 
 	private function validatePasswordChange(): bool
 	{
-		
+
 		if($this->passwordVerified) {
 			return true;
 		}
-		
+
 		if(!$this->isModified(['password']) || $this->getOldValue('password') == null) {
 			return true;
 		}
-		
+
 		if(App::get()->getInstaller()->isInProgress()) {
 			return true;
-		} 
-		
-		$authState = App::get()->getAuthState();
-		if(!$authState) {
-			return false;
 		}
-		if(!$authState->isAuthenticated()) {
-			return false;
-		}						
-		
-		return go()->getModel()->getUserRights()->mayChangeUsers;
+
+		return false;
 	}
-	
+
 	protected function internalValidate() {
 
 		if(!isset($this->homeDir) && in_array("homeDir", $this->selectedProperties)) {
@@ -537,7 +581,7 @@ class User extends AclItemEntity {
 				$this->groups[] = Group::ID_EVERYONE;
 				// $this->setValidationError('groups', ErrorCode::INVALID_INPUT, go()->t("You can't remove group everyone"));
 			}
-			
+
 			if(!$this->isNew()) {
 				if(!in_array($this->getPersonalGroup()->id, $this->groups)) {
 					$this->setValidationError('groups', ErrorCode::INVALID_INPUT, go()->t("You can't remove the user's personal group"));
@@ -548,22 +592,29 @@ class User extends AclItemEntity {
 				$this->setValidationError('groups', ErrorCode::INVALID_INPUT, go()->t("You can't remove group Admins from the primary admin user"));
 			}
 		}
-		
+
 		if(!$this->validatePasswordChange()) {
-			if(!$this->hasValidationErrors('currentPassword')) {
+			if($this->passwordVerified === null) {
 				$this->setValidationError('currentPassword', ErrorCode::REQUIRED);
+			} else {
+				$this->setValidationError('currentPassword', ErrorCode::INVALID_INPUT);
 			}
 		}
-		
+
 		if(isset($this->plainPassword) && $this->validatePassword) {
-			if(strlen($this->plainPassword) < go()->getSettings()->passwordMinLength) {
+			$passwordLen = strlen($this->plainPassword);
+			if($passwordLen < go()->getSettings()->passwordMinLength) {
 				$this->setValidationError('password', ErrorCode::INVALID_INPUT, "Minimum password length is ".go()->getSettings()->passwordMinLength." chars");
 			}
+
+			if($passwordLen > go()->getSettings()->passwordMaxLength) {
+				$this->setValidationError('password', ErrorCode::INVALID_INPUT, "Maximum password length is ".go()->getSettings()->passwordMaxLength." chars");
+			}
 		}
-		
+
 		if($this->isNew()) {
 			$config = go()->getConfig();
-			
+
 			if(!empty($config['limits']['userCount']) && $config['limits']['userCount'] <= self::count()) {
 				throw new Forbidden("The maximum number of users have been reached");
 			}
@@ -592,7 +643,7 @@ class User extends AclItemEntity {
 				$this->setValidationError('timezone', ErrorCode::INVALID_INPUT, go()->t("Invalid timezone"));
 			}
 		}
-		
+
 		parent::internalValidate();
 	}
 
@@ -636,7 +687,7 @@ class User extends AclItemEntity {
 
 		return parent::internalGetPermissionLevel();
 	}
-	
+
 	protected static function textFilterColumns(): array
 	{
 		return ['username', 'displayName', 'email'];
@@ -716,28 +767,50 @@ class User extends AclItemEntity {
 
 
 	/**
+	 * Check if this user is in a group
+	 *
+	 * @param int $groupId
+	 * @return bool
+	 * @throws Exception
+	 */
+	public function isInGroup(int $groupId): bool
+	{
+		if(!$this->isFetched("groups")) {
+			$this->fetchRelation("groups");
+		}
+
+		return in_array($groupId, $this->groups);
+	}
+
+	private array $authenticators;
+
+
+	/**
 	 * Get available authentication methods
 	 * 
 	 * @return BaseAuthenticator[]
 	 */
 	public function getAuthenticators(): array
 	{
-		$authenticators = [];
+
+		if(isset($this->authenticators)) {
+			return $this->authenticators;
+		}
+
+		$this->authenticators = [];
 
 		$auth = new Authenticate();
 		$primary = $auth->getPrimaryAuthenticatorForUser($this->username);
 
 		if($primary) {
-			$authenticators[] = $primary;
+			$this->authenticators[] = $primary;
 		}
 
 		foreach ($auth->getSecondaryAuthenticatorsForUser($this->username) as $authenticator) {
-			if ($authenticator::isAvailableFor($this->username)) {
-				$authenticators[] = $authenticator;
-			}
+			$this->authenticators[] = $authenticator;
 		}
 
-		return $authenticators;
+		return $this->authenticators;
 	}
 
   /**
@@ -782,6 +855,10 @@ class User extends AclItemEntity {
 		if(isset($this->plainPassword)) {
 			$this->password = $this->passwordHash($this->plainPassword);
 
+			if(!$this->isModified(['forcePasswordChange'])) {
+				$this->forcePasswordChange = false;
+			}
+
 			if(!$this->isNew()) {
 
 				//remove persistent remember me cookies on password change
@@ -789,6 +866,10 @@ class User extends AclItemEntity {
 					return false;
 				}
 			}
+		}
+
+		if($this->isModified(['password'])) {
+			$this->passwordModifiedAt = new DateTime();
 		}
 		
 		if(!parent::internalSave()) {
@@ -820,7 +901,7 @@ class User extends AclItemEntity {
 		}
 
 		if($this->isModified(['password'])) {
-			Token::destroyOtherSessons();
+			Token::destroyOtherSessons($this->id);
 		}
 
 		return true;
@@ -829,6 +910,9 @@ class User extends AclItemEntity {
 
 	protected function internalGetModified(array|string &$properties = [], bool $forIsModified = false): bool|array
 	{
+		if(!is_array($properties)) {
+			$properties = [$properties];
+		}
 		// check if it's empty because the parent method will fill it with all props
 		$allProps = empty($properties);
 
@@ -892,6 +976,11 @@ class User extends AclItemEntity {
 	 */
 	public static function passwordHash(string $password): string
 	{
+		$passwordLen = strlen($password);
+
+		if($passwordLen > go()->getSettings()->passwordMaxLength) {
+			throw new \InvalidArgumentException("Maximum password length is ".go()->getSettings()->passwordMaxLength." chars");
+		}
 		return password_hash($password, PASSWORD_DEFAULT);
 	}
 
@@ -1022,7 +1111,7 @@ class User extends AclItemEntity {
             $ua_info = \donatj\UserAgent\parse_user_agent();
             $where = [
                 'userId' => $this->id,
-                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'CLI',
+                'ip' => Request::get()->getRemoteIpAddress() ?? 'CLI',
                 'platform' => $ua_info['platform'],
                 'name' => $ua_info['browser']
             ];
@@ -1121,24 +1210,21 @@ class User extends AclItemEntity {
 		return true;
 	}
 
-
 	public static function legacyOnDelete(Query $query): bool
 	{
+		foreach($query as $pk) {
+			/** @noinspection PhpUnhandledExceptionInspection */
+			$user = LegacyUser::model()->findByPk($pk['id'], false, true);
+			LegacyUser::model()->fireEvent("beforedelete", [$user, true]);
+			//delete all acl records
+			$defaultModels = AbstractUserDefaultModel::getAllUserDefaultModels();
 
-			foreach($query as $id) {
-				/** @noinspection PhpUnhandledExceptionInspection */
-				$user = LegacyUser::model()->findByPk($id, false, true);
-				LegacyUser::model()->fireEvent("beforedelete", [$user, true]);
-				//delete all acl records		
-				$defaultModels = AbstractUserDefaultModel::getAllUserDefaultModels();
-
-				foreach($defaultModels as $model){
-					$model->deleteByAttribute('user_id',$id);
-				}
-
-				LegacyUser::model()->fireEvent("delete", [$user, true]);
+			foreach($defaultModels as $model){
+				$model->deleteByAttribute('user_id',$pk['id']);
 			}
-	
+
+			LegacyUser::model()->fireEvent("delete", [$user, true]);
+		}
 
 		return true;
 	}

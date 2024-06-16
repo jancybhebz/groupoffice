@@ -13,13 +13,17 @@ CREATE TABLE `core_acl_group` (
   `level` tinyint(4) NOT NULL DEFAULT 10
 ) ENGINE=InnoDB;
 
-CREATE TABLE `core_acl_group_changes` (
-  `id` int(11) NOT NULL,
-  `aclId` int(11) NOT NULL,
-  `groupId` int(11) NOT NULL,
-  `grantModSeq` int(11) NOT NULL,
-  `revokeModSeq` int(11) DEFAULT NULL
-) ENGINE=InnoDB;
+-- auto-generated definition
+create table core_acl_group_changes
+(
+    id      int not null auto_increment primary key ,
+    aclId   int        not null,
+    groupId int        not null,
+    modSeq  int        not null,
+    granted tinyint(1) not null
+);
+
+
 
 CREATE TABLE `core_auth_method` (
   `id` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -179,7 +183,8 @@ CREATE TABLE `core_module` (
   `enabled` tinyint(1) NOT NULL DEFAULT 1,
   `modifiedAt` datetime DEFAULT NULL,
   `modSeq` int(11) DEFAULT NULL,
-  `deletedAt` datetime DEFAULT NULL
+  `deletedAt` datetime DEFAULT NULL,
+  shadowAclId int null
 ) ENGINE=InnoDB;
 
 CREATE TABLE `core_search` (
@@ -244,10 +249,10 @@ CREATE TABLE `core_user` (
   `holidayset` varchar(10) DEFAULT NULL,
   `sort_email_addresses_by_time` tinyint(1) NOT NULL DEFAULT 0,
   `no_reminders` tinyint(1) NOT NULL DEFAULT 0,
-  `last_password_change` int(11) NOT NULL DEFAULT 0,
-  `force_password_change` tinyint(1) NOT NULL DEFAULT 0,
   `homeDir` varchar (190) not null,
   `confirmOnMove` TINYINT(1) NOT NULL DEFAULT 0,
+  `passwordModifiedAt` datetime null,
+  `forcePasswordChange` boolean default false not null,
     PRIMARY KEY (`id`)
 )
   ENGINE=InnoDB;
@@ -504,8 +509,8 @@ ALTER TABLE `core_acl_group`
   ADD KEY `groupId` (`groupId`);
 
 ALTER TABLE `core_acl_group_changes`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `aclId` (`aclId`,`groupId`),
+#   ADD PRIMARY KEY (`id`),
+  ADD KEY `aclId` (`aclId`,`groupId`,`modSeq`),
   ADD KEY `group` (`groupId`);
 
 ALTER TABLE `core_auth_method`
@@ -675,8 +680,8 @@ ALTER TABLE `go_working_weeks`
 ALTER TABLE `core_acl`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
-ALTER TABLE `core_acl_group_changes`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+# ALTER TABLE `core_acl_group_changes`
+#   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 ALTER TABLE `core_change`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
@@ -736,7 +741,7 @@ ALTER TABLE `core_acl_group`
 
 ALTER TABLE `core_acl_group_changes`
   ADD CONSTRAINT `all` FOREIGN KEY (`aclId`) REFERENCES `core_acl` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `group` FOREIGN KEY (`groupId`) REFERENCES `core_group` (`id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `group` FOREIGN KEY (`groupId`) REFERENCES `core_group` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 ALTER TABLE `core_auth_method`
   ADD CONSTRAINT `core_auth_method_ibfk_1` FOREIGN KEY (`moduleId`) REFERENCES `core_module` (`id`) ON DELETE CASCADE;
@@ -809,7 +814,7 @@ ALTER TABLE `core_user_group`
 
 
 ALTER TABLE `core_acl`
-  ADD CONSTRAINT `core_acl_ibfk_1` FOREIGN KEY (`entityTypeId`) REFERENCES `core_entity` (`id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `core_acl_ibfk_1` FOREIGN KEY (`entityTypeId`) REFERENCES `core_entity` (`id`) ON DELETE set null ;
 
 CREATE TABLE `go_template_group` (
    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -1247,3 +1252,8 @@ create table core_import_mapping
 
 create index core_search_filter_index
     on core_search (filter);
+
+
+alter table core_module
+    add constraint core_module_core_acl_id_fk
+        foreign key (shadowAclId) references core_acl (id);

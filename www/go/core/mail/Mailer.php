@@ -8,6 +8,7 @@ use go\modules\community\oauth2client\model\Oauth2Client;
 use League\OAuth2\Client\Provider\Google;
 use PHPMailer\PHPMailer\Exception;
 use PHPMailer\PHPMailer\OAuth;
+use PHPMailer\PHPMailer\SMTP;
 
 /**
  * Sends mail messages
@@ -26,6 +27,10 @@ class Mailer {
 	private PHPMailer $mail;
 	private ?SmtpAccount $smtpAccount = null;
 	private ?Account $emailAccount = null;
+	/**
+	 * @var true
+	 */
+	private bool $sent = false;
 
 	/**
 	 * Create a new mail message
@@ -84,8 +89,8 @@ class Mailer {
 	{
 		if(!empty(go()->getConfig()['debugEmail'])){
 			$message->setTo(go()->getConfig()['debugEmail']);
-			$message->setBcc(array());
-			$message->setCc(array());
+			$message->setBcc('');
+			$message->setCc('');
 			go()->warn("E-mail debugging is enabled in the Group-Office configuration. All emails are send to: ".go()->getConfig()['debugEmail']);
 		}
 
@@ -119,9 +124,14 @@ class Mailer {
 	 */
 	public function send(Message $message): bool
 	{
+		$message->setMailer($this);
 		$this->prepareMessage($message);
+		$success = !!$this->mail->send();
 
-		return !!$this->mail->send();
+		if($success) {
+			$this->sent = true;
+		}
+		return $success;
 	}
 
 
@@ -133,10 +143,13 @@ class Mailer {
 	 * @throws Exception
 	 */
 	public function toStream(Message $message) {
-		$this->prepareMessage($message);
 
-		$this->mail->preSend();
-		$mime =  $this->mail->getSentMIMEMessage();
+		if(!$this->sent) {
+			$this->prepareMessage($message);
+
+			$this->mail->preSend();
+		}
+		$mime = $this->mail->getSentMIMEMessage();
 
 		$stream = fopen('php://memory','r+');
 		fwrite($stream, $mime);
@@ -153,20 +166,29 @@ class Mailer {
 	 * @throws Exception
 	 */
 	public function toString(Message $message) :string {
-		$this->prepareMessage($message);
 
-		$this->mail->preSend();
+		if(!$this->sent) {
+			$this->prepareMessage($message);
+
+			$this->mail->preSend();
+		}
 		return $this->mail->getSentMIMEMessage();
 	}
 
 	public function lastError(): string
 	{
-		return $this->mail->ErrorInfo;
+		return isset($this->mail) ? $this->mail->ErrorInfo : "";
 	}
 
 	private function initTransport() {
 
 		$this->mail = new PHPMailer();
+		if(go()->getConfig()['mailerDebugLevel'] > 0) {
+			$this->mail->SMTPDebug = min(intval(go()->getConfig()['mailerDebugLevel']), SMTP::DEBUG_LOWLEVEL);
+			$this->mail->Debugoutput = function($msg, $level)  {
+				go()->debug($msg);
+			};
+		}
 		$this->mail->setSMTPInstance(new PHPMailerSMTP());
 		$this->mail->isSMTP();
 		$this->mail->SMTPAutoTLS = false;
@@ -219,7 +241,7 @@ class Mailer {
 					'clientId' => $client->clientId,
 					'clientSecret' => $client->clientSecret,
 					'refreshToken' => $cltAcct['refreshToken'],
-					'userName' => $this->emailAccount->username,
+					'userName' => !empty($this->emailAccount->smtp_username) ? $this->emailAccount->smtp_username : $this->emailAccount->username,
 				]));
 
 			} else if (!empty($this->emailAccount->force_smtp_login)){

@@ -5,9 +5,12 @@ namespace GO\Caldav\Schedule;
 
 
 use go\core\ErrorHandler;
+use go\core\mail\AddressList;
 use go\core\model\Module;
 
 class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin{
+
+	private \Sabre\VObject\ITip\Message $itipMessage;
 
 	public function __construct($senderEmail=null) {
 		if($senderEmail === null)
@@ -38,13 +41,28 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin{
 		}
 
 		try {
-			$recipients = new \GO\Base\Mail\EmailRecipients($to);
-			$to = $recipients->getAddress();
+			go()->getLanguage()->setLanguage(go()->getAuthState()->getUser(['language'])->language);
+
+			$summary = $this->itipMessage->message->VEVENT->SUMMARY;
+			switch (strtoupper($this->itipMessage->method)) {
+				case 'REPLY':
+					$subject = 'Re: '.$summary;
+					break;
+				case 'REQUEST':
+					$subject = go()->t('Invitation', 'legacy','calendar') .': '.$summary;
+					break;
+				case 'CANCEL':
+					$subject = go()->t('Cancelled', 'legacy','calendar').': '.$summary;
+					break;
+			}
+
+			$recipients = new AddressList($to);
+			$to = $recipients[0];
 
 			$message = \GO\Base\Mail\Message::newInstance($subject)
 				->setFrom(\GO::user()->email, \GO::user()->name)
-				->addReplyTo(\GO::user()->email)
-				->addTo($to['email'], $to['personal']);
+				->setReplyTo(\GO::user()->email)
+				->addTo($to);
 
 			$mailer = $this->getUserMailer();
 
@@ -59,7 +77,7 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin{
 
 			$mailer->send($message);
 		} catch(\Throwable $e) {
-			ErrorHandler::log("Error sending CalDAV IMip mail to " . implode("," , $to));
+			ErrorHandler::log("Error sending CalDAV IMip mail to " . $to);
 			ErrorHandler::logException($e);
 		}
 	}

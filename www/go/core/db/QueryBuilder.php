@@ -8,7 +8,7 @@ use InvalidArgumentException;
 /**
  * QueryBuilder
  *
- * Builds or executes an SQL string with a {@see Query} object anmd {@see AbstractRecord}
+ * Builds or executes an SQL string with a {@see Query} object
  *
  * @copyright (c) 2015, Intermesh BV http://www.intermesh.nl
  * @author Merijn Schering <mschering@intermesh.nl>
@@ -677,7 +677,7 @@ class QueryBuilder {
 		$tokens[] = $this->quoteTableName($columnParts[0]) . '.' . $this->quoteColumnName($columnParts[1]); //column name
 		
 		if (!isset($value)) {
-			if ($comparisonOperator == '=' || $comparisonOperator == 'IS') {
+			if ($comparisonOperator == '=' || $comparisonOperator == 'IS' || $comparisonOperator == 'LIKE') {
 				$tokens[] = "IS NULL";
 			} elseif ($comparisonOperator == '!=' || $comparisonOperator == 'IS NOT') {
 				$tokens[] = "IS NOT NULL";

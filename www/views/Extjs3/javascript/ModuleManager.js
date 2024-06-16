@@ -177,26 +177,19 @@ GO.ModuleManager = Ext.extend(function(){
 			return false;
 		}
 	},
-	
-	getAllPanels : function(){
-		
-		var panels = [];
-		
-		for(var i=0, l = this.sortOrder.length;i<l;i++)
-		{
-			panels.push(this.getPanel(this.sortOrder[i]));	
-		}
-		return panels;
-	},
 
 	getAllPanelConfigs : function(){
-		var configs = [];
 
-		for(var i=0, l = this.sortOrder.length;i<l;i++)
-		{
-			configs.push(this.panelConfigs[this.sortOrder[i]]);
-		}
-		return configs;
+		let p = Object.values(this.panelConfigs);
+
+		p.sort((a, b) => {
+			const sortA = go.Modules.get(a.package, a.moduleName, ).sort_order;
+			const sortB = go.Modules.get(b.package, b.moduleName, ).sort_order;
+
+			return sortA - sortB
+		})
+		return p;
+
 	},
 	
 	userHasModule : function(module){

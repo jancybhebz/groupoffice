@@ -88,6 +88,11 @@ class Instance extends Entity {
 		return ['hostname', 'adminEmail', 'adminDisplayName'];
 	}
 
+	protected function canCreate(): bool
+	{
+		return \go\modules\community\multi_instance\Module::get()->getModel()->getUserRights()->mayRead;
+	}
+
 	protected static function defineFilters(): Filters
 	{
 		return parent::defineFilters()
@@ -96,7 +101,9 @@ class Instance extends Entity {
 			})
 			->add('isTrial', function(Criteria $c, $value) {
 				$c->andWhere('isTrial', '=', $value);
-			});
+			})
+			->addColumn("adminEmail")
+			->addColumn("adminDisplayName");
 	}
 
 
@@ -274,7 +281,6 @@ class Instance extends Entity {
 
 		$valuesToCopy = array (
 			0 => 'locale',
-			1 => 'primaryColorTransparent',
 			4 => 'language',
 			7 => 'smtpHost',
 			8 => 'smtpPort',
@@ -284,9 +290,9 @@ class Instance extends Entity {
 			15 => 'passwordMinLength',
 			16 => 'logoutWhenInactive',
 			19 => 'syncChangesMaxAge',
-			22 => 'primaryColor',
-			23 => 'secondaryColor',
-			24 => 'accentColor',
+//			22 => 'primaryColor',
+//			23 => 'secondaryColor',
+//			24 => 'accentColor',
 			26 => 'defaultTimezone',
 			27 => 'defaultDateFormat',
 			28 => 'defaultTimeFormat',
@@ -537,8 +543,18 @@ class Instance extends Entity {
 	/**
 	 * @throws Exception
 	 */
-	private function writeConfig() {
-		if(!$this->getConfigFile()->putContents("<?php\n\$config = " . var_export($this->getInstanceConfig(), true) . ";\n")) {
+	private function writeConfig(): void
+	{
+		$file = $this->getConfigFile();
+		$tmpFile = $file->getFolder()->getFile('config.tmp');
+		// Write to temp file first because when we had a full disk it happened that the config.php files were empty.
+		$data = "<?php\n\$config = " . var_export($this->getInstanceConfig(), true) . ";\n";
+
+		if(!$tmpFile->putContents($data)){
+			throw new Exception("Could not write to temporary file");
+		}
+
+		if(!$file->delete() || !$tmpFile->move($file)) {
 			throw new Exception("Could not write to config.php file");
 		}
 
@@ -549,7 +565,6 @@ class Instance extends Entity {
 	
 	private function getGlobalConfig(): array
 	{
-		
 		if(!isset($this->globalConfig)) {
 			$globalConfigFile = "/etc/groupoffice/globalconfig.inc.php";
 			if(file_exists($globalConfigFile)) {
@@ -798,6 +813,9 @@ class Instance extends Entity {
 	protected static function internalDelete(Query $query): bool
 	{
 
+		// dropping databases / users will auto commit transactions. So we pause and resume.
+		go()->getDbConnection()->pauseTransactions();
+
 		$instances = Instance::find()->mergeWith($query);
 
 		foreach($instances as $instance) {
@@ -805,7 +823,7 @@ class Instance extends Entity {
 				//load instance config just before moving the config file. Moving the config file disables
 				// the installation and prevents further changes.
 				$instance->getInstanceConfig();
-				$instance->getConfigFile()->move($instance->getDataFolder()->getFile('config.php'));
+				$instance->getConfigFile()->move($instance->getDataFolder()->getFile('config.php')->appendNumberToNameIfExists());
 
 				try {
 					$instance->getTempFolder()->delete();
@@ -842,6 +860,8 @@ class Instance extends Entity {
 					->send();
 			}
 		}
+
+		go()->getDbConnection()->resumeTransactions();
 		
 		return parent::internalDelete($query);
 	}
@@ -865,7 +885,7 @@ class Instance extends Entity {
 		$http->setOption(CURLOPT_SSL_VERIFYHOST, false);
 		$http->setOption(CURLOPT_SSL_VERIFYPEER, false);
 
-		$response = $http->get($proto . $this->hostname . '/install/upgrade.php?confirmed=1&ignore=modules');
+		$response = $http->get($proto . $this->hostname . '/install/upgrade.php?confirmed=1&ignore=modules&onlyIfNeeded=1');
 
 		//echo $response['body'];
 
@@ -951,6 +971,30 @@ class Instance extends Entity {
 		$config['allowed_modules'][] = $this->getStudioPackage() . "/*";
 		$this->setInstanceConfig($config);
 		$this->writeConfig();
+
+	}
+
+	/**
+	 * @throws Exception
+	 */
+	public function addAllowedModule(string $package, string $name): void
+	{
+		$instanceConfig = $this->getInstanceConfig();
+		$mergedConfig = array_merge($this->getGlobalConfig(), $instanceConfig);
+		if (!array_key_exists('allowed_modules', $mergedConfig)) {
+			// all modules are allowed
+			return;
+		}
+
+		if(ModuleCollection::isAllowed($name, $package, $mergedConfig['allowed_modules'])) {
+			return;
+		}
+
+		$instanceConfig['allowed_modules'] =  $mergedConfig['allowed_modules'];
+		$instanceConfig['allowed_modules'][] = $package .'/' .$name;
+		$this->setInstanceConfig($instanceConfig);
+		$this->writeConfig();
+
 
 	}
 

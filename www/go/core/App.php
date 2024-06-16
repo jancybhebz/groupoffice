@@ -10,6 +10,7 @@ namespace go\core {
 	use go\core\cache\CacheInterface;
 	use go\core\db\Connection;
 	use go\core\db\Database;
+	use go\core\db\DbException;
 	use go\core\db\Table;
 	use go\core\event\EventEmitterTrait;
 	use go\core\event\Listeners;
@@ -19,6 +20,7 @@ namespace go\core {
 	use go\core\mail\Mailer;
 	use go\core\model\Group;
 	use go\core\model\Module as ModuleModel;
+	use go\core\orm\Entity;
 	use go\core\orm\EntityType;
 	use go\core\orm\exception\SaveException;
 	use go\core\orm\Property;
@@ -241,6 +243,7 @@ namespace go\core {
 		}
 
 		private function initCompatibility() {
+
 			/** @noinspection PhpIncludeInspection */
 			require(Environment::get()->getInstallPath() . "/go/GO.php");
 			spl_autoload_register(array('GO', 'autoload'));
@@ -441,21 +444,6 @@ namespace go\core {
 				return $this->config;
 			}
 
-			//If acpu is supported we can use it to cache the config object.
-			// if(cache\Apcu::isSupported() && ($token = State::getClientAccessToken())) {
-			// 	$cacheKey = 'go_conf_' . $token;
-
-			// 	$this->config = apcu_fetch($cacheKey);
-			// 	if($this->config && $this->config['cacheTime'] > filemtime($this->config['configPath']) && (!file_exists('/etc/groupoffice/globalconfig.inc.php') || $this->config['cacheTime'] > filemtime('/etc/groupoffice/globalconfig.inc.php'))) {
-			// 		if(Request::get()->getHeader('X-Debug') == "1") {
-			// 			$this->config['core']['general']['debug'] = true;
-			// 		}
-			// 		return $this->config;
-			// 	}
-			// }
-			
-			//$config = array_merge($this->getGlobalConfig(), $this->getInstanceConfig());
-
 			//defaults
 			$config = new ArrayObject([
 				"frameAncestors" => "",
@@ -465,6 +453,7 @@ namespace go\core {
 				"tmpdir" => sys_get_temp_dir() . '/groupoffice',
 				"debug" => false,
 				"debugEmail" => false,
+				"mailerDebugLevel" => 0,
 				"servermanager" => false,
 				"sseEnabled" => true,
 				"max_users" => 0,
@@ -472,6 +461,7 @@ namespace go\core {
 				"allowed_modules" => "",
 				"product_name" => "Group-Office",
 				"lockWithFlock" => false,
+				"checkForUpdates" => true,
 
 				"db_host" => "localhost",
 				"db_port" => 3306,
@@ -582,11 +572,12 @@ namespace go\core {
 		{
 			try {
 				return go()->getDatabase()->hasTable('core_module');
-			} catch(PDOException $e) {
+			} catch(DbException $e) {
 
 				go()->debug("Check isInstalled failed with : " . $e->getMessage());
 
-				if(strpos($e->getMessage(), '1049') !== false || strpos($e->getMessage(), '1146') !== false) {
+				$pdoMessage = $e->getPrevious()->getMessage();
+				if(strpos($pdoMessage, '1049') !== false || strpos($pdoMessage,  '1146') !== false) {
 					// database does not exists or table does not exist
 
 					return false;
@@ -687,7 +678,8 @@ namespace go\core {
 		 * @param boolean $onDestruct
 		 * @noinspection PhpDocMissingThrowsInspection
 		 */
-		public function rebuildCache(bool $onDestruct = false) {
+		public function rebuildCache(bool $onDestruct = false): void
+		{
 			
 			if($onDestruct) {				
 				$this->rebuildCacheOnDestruct = $onDestruct;
@@ -719,8 +711,7 @@ namespace go\core {
 			App::get()->getCache()->flush( false);
 			go()->getDatabase()->clearCache();
 			Settings::flushCache();
-			Property::clearCache();
-			Property::clearCachedRelationStmts();
+			Entity::clearCache();
 			GO::clearCache();
 			Listeners::get()->clear();
 			Observable::$listeners = [];
@@ -853,15 +844,15 @@ namespace go\core {
 		/**
 		 * Translates a language variable name into the local language.
 		 * 
-		 * @param String $str String to translate
-		 * @param String $module Name of the module to find the translation
-		 * @param String $package Only applies if module is set to 'base'
+		 * @param string $str String to translate
+		 * @param ?string $package The module package name. Defaults to {@see Language::$defaultPackage}
+		 * @param string|array|null $module Name of the module. Defaults to {@see Language::$defaultModule}
 		 */
-		public function t(string $str, string $package = 'core', string $module = 'core') {
+		public function t(string $str, string $package = null, string $module = null) {
 			return $this->getLanguage()->t($str, $package, $module);
 		}
 		
-		private $language;
+		private Language $language;
 		
 		/**
 		 * 

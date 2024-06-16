@@ -24,8 +24,10 @@ use go\core\util\JSON;
  */
 function output(array $data = [], int $status = 200, string $statusMsg = null) {
 
+	Response::get()->setHeader('Content-Type', 'application/json;charset=utf-8');
 	Response::get()->setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
 	Response::get()->setHeader('Pragma', 'no-cache');
+	Response::get()->setHeader('Expires', '01-07-2003 12:00:00 GMT');
 
 	Response::get()->setStatus($status, $statusMsg ? str_replace("\n", " - " , $statusMsg) : null);
 	Response::get()->sendHeaders();
@@ -129,7 +131,21 @@ try {
 
 			break;
 		case 'forgotten':
+
+			// Don't change log message as fail2ban relies on it
+			ErrorHandler::log("Lost password request from IP: '" . Request::get()->getRemoteIpAddress() . "'");
+
+			$start = (int) (microtime(true) * 1000);
+
 			$auth->sendRecoveryMail($data['email']);
+
+			//always take 4s to prevent timing attacks
+			$wait = 4000 + $start - ((int) (microtime(true) * 1000));
+			if($wait > 0) {
+				usleep($wait * 1000);
+			} else {
+				ErrorHandler::log("Warning: sending lost password message took longer than 4s. Timing attack possible because of this. Make sure your SMTP is faster.");
+			}
 			//Don't show if user was found or not for security
 			output([], 200, "Recovery mail sent");
 			break;
@@ -140,7 +156,7 @@ try {
 				output(['success' => false]);
 			}
 			if (!empty($data['newPassword'])) {
-				$user->setPassword($data['newPassword']);
+				$user->setPassword($data['newPassword'], true);
 				//$user->checkRecoveryHash($data['hash']); // already checked by recovery()
 				output(['passwordChanged' => $user->save(), 'validationErrors' => $user->getValidationErrors()]);
 			}
@@ -197,12 +213,14 @@ try {
 					], 401, "Bad username or password");
 				}
 
+
+
 				$token = new Token();
 				$token->userId = $user->id;
 				$token->addPassedAuthenticator($auth->getUsedPasswordAuthenticator());
 
 				if (!$token->save()) {
-					throw new Exception("Could not save token");
+					throw new SaveException($token);
 				}
 			}
 
@@ -273,7 +291,7 @@ try {
 	output([], 403, $e->getMessage());
 } catch (Unavailable $e) {
 	output([], 503, $e->getMessage());
-} catch (Exception $e) {
+} catch (Throwable $e) {
 	ErrorHandler::logException($e);
 
 	// make sure there's no newline in the status text

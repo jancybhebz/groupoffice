@@ -641,7 +641,10 @@ this.filesContextMenu = new GO.files.FilesContextMenu();
 	config.keys=[{
 		ctrl:true,
 		key: Ext.EventObject.C,
-		fn:function(){
+		fn:function(key, e){
+			if(e.target.tagName == "INPUT") {
+				return;
+			}
 			var records = this.getSelectedGridRecords();
 			this.onCutCopy('copy', records);
 		},
@@ -649,7 +652,10 @@ this.filesContextMenu = new GO.files.FilesContextMenu();
 	},{
 		ctrl:true,
 		key: Ext.EventObject.X,
-		fn:function(){
+		fn:function(key,e){
+			if(e.target.tagName == "INPUT") {
+				return;
+			}
 			var records = this.getSelectedGridRecords();
 			this.onCutCopy('cut', records);
 		},
@@ -657,8 +663,13 @@ this.filesContextMenu = new GO.files.FilesContextMenu();
 	},{
 		ctrl:true,
 		key: Ext.EventObject.V,
-		fn:function(){
+		fn:function(key,e,b){
+
+			if(e.target.tagName == "INPUT") {
+				return;
+			}
 			this.onPaste();
+
 		},
 		scope:this
 	}];

@@ -1,6 +1,7 @@
 <?php
 
 use go\core\App;
+use go\core\auth\ForcePasswordChange;
 use go\core\db\Table;
 use go\core\util\ClassFinder;
 use go\core\acl\model\AclOwnerEntity;
@@ -1533,3 +1534,73 @@ $updates['202310301526'][] = "alter table core_search
 
 $updates['202310301526'][] = "create index core_search_filter_index
     on core_search (filter);";
+
+
+$updates['202403181539'][] = "delete from core_acl_group_changes;";
+
+$updates['202403181539'][] = "alter table core_acl_group_changes change grantModSeq modSeq int not null;";
+
+$updates['202403181539'][] = "alter table core_acl_group_changes  add granted boolean not null;";
+
+$updates['202403181539'][] = "alter table core_acl_group_changes drop column revokeModSeq;";
+
+$updates['202403181539'][] = "create index aclId2
+    on core_acl_group_changes (aclId, groupId, modSeq);";
+
+$updates['202403181539'][] = "drop index aclId on core_acl_group_changes;";
+
+$updates['202403181539'][] = "";
+
+
+$updates['202403181539'][] = "alter table core_user
+    drop column last_password_change;";
+
+$updates['202403181539'][] = "alter table core_user
+    drop column force_password_change;";
+
+$updates['202403181539'][] = "alter table core_user
+    add passwordModifiedAt datetime null;";
+
+$updates['202403181539'][] = "alter table core_user
+    add forcePasswordChange boolean default false not null;";
+
+$updates['202403181539'][] = function() {
+	ForcePasswordChange::register();
+};
+
+
+$updates['202403181539'][] = function() {
+	try {
+		echo "Installing `;-- Have I been Pwned module";
+		\go\modules\community\pwned\Module::get()->install();
+
+	} catch(Throwable $e) {
+		echo "ERROR: " . $e->getMessage();
+	}
+};
+
+$updates['202403181539'][] = "alter table core_acl_group_changes
+    drop foreign key `group`;";
+
+$updates['202403181539'][] = "alter table core_acl_group_changes
+    add constraint `group`
+        foreign key (groupId) references core_group (id)
+            on delete cascade on update cascade";
+
+
+
+$updates['202405171539'][] = "alter table core_module
+    add shadowAclId int null;";
+
+$updates['202405171539'][] = "alter table core_module
+    add constraint core_module_core_acl_id_fk
+        foreign key (shadowAclId) references core_acl (id);";
+
+
+$updates['202405171539'][] = "alter table core_acl
+    drop foreign key core_acl_ibfk_1;";
+
+$updates['202405171539'][] = "alter table core_acl
+    add constraint core_acl_ibfk_1
+        foreign key (entityTypeId) references core_entity (id) on delete set null;";
+

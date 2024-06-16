@@ -2,6 +2,9 @@
 
 namespace go\core\imap;
 
+use go\core\mail\Util;
+use go\core\util\StringUtil;
+
 
 /**
  * IMAP Functions
@@ -20,6 +23,19 @@ class Utils {
 	 */
 	public static function escape(string $str): string {
 		return str_replace(array('\\', '"'), array('\\\\', '\"'), $str);
+	}
+
+	/**
+	 * Decodes MIME message header extensions that are non ASCII text (see RFC2047).
+	 *
+	 * {@see http://www.faqs.org/rfcs/rfc2047}
+	 *
+	 * @param ?string $string
+	 * @param string $defaultCharset
+	 * @return array|string|string[]
+	 */
+	public static function mimeHeaderDecode(?string $string, string $defaultCharset='UTF-8') : string {
+		return Util::mimeHeaderDecode($string, $defaultCharset);
 	}
 
 	/**

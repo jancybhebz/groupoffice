@@ -93,7 +93,7 @@ class CoreController extends \GO\Base\Controller\AbstractController {
 		$response['info']='<table>';
 		
 		foreach($info as $key=>$value)
-			$response['info'] .= '<tr><td>'.$key.':</td><td>'.$value.'</td></tr>';
+			$response['info'] .= '<tr><td>'.$key.':</td><td>'.(is_scalar($value) ? $value : var_export($value, true)).'</td></tr>';
 		
 		$response['info'].='</table>';
 		
@@ -806,10 +806,12 @@ class CoreController extends \GO\Base\Controller\AbstractController {
 
 		$version = go()->getVersion();
 
-		$latestVersion = $this->getLatestVersionNumber();
+		if(go()->getConfig()['checkForUpdates']) {
+			$latestVersion = $this->getLatestVersionNumber();
 
-		if($latestVersion && $latestVersion != $version) {
-			$version .= ' <span class="success">('. go()->t('update available') .': '. $latestVersion . ')</span>';
+			if($latestVersion && $latestVersion != $version) {
+				$version .= ' <span class="success">('. go()->t('update available') .': '. $latestVersion . ')</span>';
+			}
 		}
 
 		$about = strtr(GO::t("Version: {version}<br/>Copyright (c) 2003-{current_year}, {company_name}<br/>All rights reserved."),[
@@ -940,7 +942,7 @@ class CoreController extends \GO\Base\Controller\AbstractController {
 	 * Create an url to the given model with the given id.
 	 * The format of the parameter needs to be: "ModelType:ModelId" ("GO\Projects2\Model\Project:2")
 	 * 
-	 * @param StringHelper $modelTypeAndKey Example: "GO\Projects2\Model\Project:2"
+	 * @param string $modelTypeAndKey Example: "GO\Projects2\Model\Project:2"
 	 */
 	public function actionCreateModelUrl($modelTypeAndKey){
 		$response = new \GO\Base\Data\JsonResponse(array(

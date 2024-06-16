@@ -92,8 +92,8 @@ GO.calendar.formatQtip = function(data,verbose)
 	if (!GO.util.empty(data.resourced_calendar_name))
 		str += '<br />'+t("Resource used in", "calendar")+': '+Ext.util.Format.htmlEncode(data.resourced_calendar_name);
 	
-	return str;
-//	return Ext.util.Format.htmlEncode(str);
+	// return str;
+	return Ext.util.Format.htmlEncode(str);
 }
 
 GO.calendar.MainPanel = function(config){
@@ -909,8 +909,6 @@ Ext.extend(GO.calendar.MainPanel, Ext.Panel, {
 		var store = this.getActivePanel().store;
 		
 		if(store.reader.jsonData.backgrounds){
-			
-			
 			var rowIndex;
 			
 			for(var cal_id in store.reader.jsonData.backgrounds){					
@@ -918,7 +916,7 @@ Ext.extend(GO.calendar.MainPanel, Ext.Panel, {
 				if(rowIndex>-1){
 					var rowEl = Ext.get(view.getCell(rowIndex, 0));		
 					if(rowEl)
-						rowEl.applyStyles("color: #"+store.reader.jsonData.backgrounds[cal_id]);				
+						rowEl.first().first().applyStyles("background-color: #"+store.reader.jsonData.backgrounds[cal_id]);
 				}
 			}
 		}
@@ -1807,6 +1805,13 @@ Ext.extend(GO.calendar.MainPanel, Ext.Panel, {
 			case "GO\\Adressbook\\Model\\Contact":
 				go.Router.goto("contact/" + event['contact_id']);
 			break;
+
+			case 'go\\modules\\udo\\forms\\model\\RoofReport':
+				const dlg = new go.modules.udo.forms.DakmeldingDialog(),
+					rid = event.id.substring(1);
+				dlg.load(rid);
+				dlg.show();
+				break;
 			
 			case "GO\\Calendar\\Model\\Event":
 				if(event.permission_level<GO.permissionLevels.write) {
@@ -1924,7 +1929,7 @@ Ext.extend(GO.calendar.MainPanel, Ext.Panel, {
 			this.writableCalendarsStore = new GO.data.JsonStore({
 				url: GO.url("calendar/calendar/store"),
 				baseParams: {
-					permissionLevel: GO.permissionLevels.write
+					permissionLevel: GO.permissionLevels.manage
 				},
 				fields:['id','name','user_name'],
 				remoteSort:true,

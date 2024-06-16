@@ -84,3 +84,6 @@ lang.csv
 node_modules
 dist
 /tests/.phpunit.cache/
+/www/ca.crt
+/scripts/emaildomaincheck/result.json
+/scripts/ignore/

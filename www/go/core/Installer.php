@@ -4,30 +4,27 @@ namespace go\core;
 
 use Exception;
 use GO;
+use GO\Base\Db\ActiveRecord;
 use GO\Base\Exception\AccessDenied;
 use GO\Base\Mail\Message;
 use GO\Base\Model\Template;
+use go\core\auth\ForcePasswordChange;
 use go\core\auth\Password;
 use go\core\auth\TemporaryState;
 use go\core\cache\None;
+use go\core\db\DbException;
 use go\core\db\Query;
-use go\core\db\Table;
 use go\core\db\Utils;
-use go\core\event\Listeners;
 use go\core\fs\File;
-use go\core\jmap;
-use go\core\model;
+use go\core\model\Acl;
 use go\core\model\Group;
+use go\core\model\Module as GoCoreModule;
 use go\core\model\User;
 use go\core\orm\Entity;
-use go\core\orm\Property;
 use go\core\util\ClassFinder;
 use go\core\util\Lock;
 use PDO;
 use PDOException;
-use go\core\model\Module as GoCoreModule;
-use GO\Base\Db\ActiveRecord;
-use go\core\model\Acl;
 
 class Installer {
 	
@@ -117,6 +114,7 @@ class Installer {
 		go()->clearCache();
 		$cacheCls = get_class(go()->getCache());
 		go()->setCache(new None());
+		go()->disableEvents();
 
 
 		self::$isInstalling = true;
@@ -184,6 +182,8 @@ class Installer {
 		jmap\Entity::$trackChanges = true;
 		go()->getDbConnection()->exec("SET FOREIGN_KEY_CHECKS=1;");
 		self::$isInstalling = false;
+
+		go()->enableEvents();
 	}
 
 	/**
@@ -251,6 +251,10 @@ class Installer {
 		$this->createGarbageCollection();
 
 		if(!Password::register()) {
+			throw new Exception("Failed to register Password authenticator");
+		}
+
+		if(!ForcePasswordChange::register()) {
 			throw new Exception("Failed to register Password authenticator");
 		}
 	}
@@ -470,7 +474,9 @@ class Installer {
 		go()->setAuthState((new TemporaryState())->setUserId(1));
 		GO::session()->runAsRoot();
 		GO::$ignoreAclPermissions = true;
-		
+
+		go()->disableEvents();
+
 
 		$this->isValidDb();
 		go()->getCache()->flush(true, false);
@@ -481,6 +487,7 @@ class Installer {
 //		if(!empty($unavailable)) {
 //			throw new \Exception("There are unavailable modules: " . var_export($unavailable, true));
 //		}
+
 
 		$this->disableUnavailableModules();
 
@@ -542,14 +549,10 @@ class Installer {
 			$module->permissions[Group::ID_EVERYONE] = $everyone;
 			$module->save();
 		}
-//		$acl = $module->findAcl();
-//		if(!$acl->hasGroup(Group::ID_EVERYONE)) {
-//			$acl->addGroup(Group::ID_EVERYONE);
-//			$acl->save();
-//		}
+
+		go()->enableEvents();
 
 		$this->fireEvent(static::EVENT_UPGRADE);
-
 
 		//phpunit tests will use change tracking after install
 		jmap\Entity::$trackChanges = true;
@@ -557,7 +560,10 @@ class Installer {
 		self::$isUpgrading = false;
 
 		$this->enableGarbageCollection();
-        $this->enableDiskUsage();;
+		$this->enableDiskUsage();
+
+
+
 		echo "Done!\n";
 
 		ob_flush();
@@ -756,23 +762,23 @@ class Installer {
 						try {
 							if (!empty($query))
 								go()->getDbConnection()->query($query);
-						} catch (PDOException $e) {
+						} catch (DbException $e) {
 
 							if (
-								$e->getCode() == '23000' ||
-								$e->getCode() == '42S21' || //duplicate col
-								$e->getCode() == '42S01' || //table exists
-								$e->getCode() == '42S22' || //col not found
-								strstr($e->getMessage(), 'errno: 121 ') || // (errno: 121 "Duplicate key on write or update")
-								strstr($e->getMessage(), ' 1826 ') || //HY000: SQLSTATE[HY000]: General error: 1826 Duplicate foreign key constraint
-								strstr($e->getMessage(), ' 1091 ')  || //42000: SQLSTATE[42000]: Syntax error or access violation: 1091 Can't DROP 'type'; check that column/key exists
-								strstr($e->getMessage(), ' 1022 ')  || //Integrity constraint violation: 1022 Can't write; duplicate key in table '#sql-509_19b'/
-								strstr($e->getMessage(), ' 1061 ') ||  //  SQLSTATE[42000]: Syntax error or access violation: 1061 Duplicate key name
-								strstr($e->getMessage(), ' 1068 ') //  1068 Multiple primary key defined
+								$e->getPrevious()->getCode() == '23000' ||
+								$e->getPrevious()->getCode() == '42S21' || //duplicate col
+								$e->getPrevious()->getCode() == '42S01' || //table exists
+								$e->getPrevious()->getCode() == '42S22' || //col not found
+								strstr($e->getPrevious()->getMessage(), 'errno: 121 ') || // (errno: 121 "Duplicate key on write or update")
+								strstr($e->getPrevious()->getMessage(), ' 1826 ') || //HY000: SQLSTATE[HY000]: General error: 1826 Duplicate foreign key constraint
+								strstr($e->getPrevious()->getMessage(), ' 1091 ')  || //42000: SQLSTATE[42000]: Syntax error or access violation: 1091 Can't DROP 'type'; check that column/key exists
+								strstr($e->getPrevious()->getMessage(), ' 1022 ')  || //Integrity constraint violation: 1022 Can't write; duplicate key in table '#sql-509_19b'/
+								strstr($e->getPrevious()->getMessage(), ' 1061 ') ||  //  SQLSTATE[42000]: Syntax error or access violation: 1061 Duplicate key name
+								strstr($e->getPrevious()->getMessage(), ' 1068 ') //  1068 Multiple primary key defined
 								) {
 
 								//duplicate and drop errors. Ignore those on updates.
-								echo "IGNORE: " . $e->getMessage() ."\n";
+								echo "IGNORE: " . $e->getPrevious()->getMessage() ."\n";
 
 							} else {
 

@@ -88,6 +88,7 @@ login/LoginDialog.js
 login/BaseLoginPanel.js
 login/ForgotDialog.js
 login/UsernamePanel.js
+login/ForcePasswordChangePanel.js
 login/LoginPanel.js
 login/RecoveryDialog.js
 
@@ -255,7 +256,7 @@ customfields/type/Notes.js
 customfields/type/EncryptedText.js
 customfields/type/TemplateFieldDialog.js
 customfields/type/TemplateField.js
-
+customfields/EditFieldSetDialog.js
 
 search/Panel.js
 search/SearchEmailCombo.js
@@ -263,8 +264,8 @@ search/SearchCombo.js
 search/SearchField.js
 
 modules/SystemSettingsModuleGrid.js
-modules/PermissionsWindow.js
 modules/GroupRights.js
+modules/ModuleSortWindow.js
 
 
 filter/Conditions.js

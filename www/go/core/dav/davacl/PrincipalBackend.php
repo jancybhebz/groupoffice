@@ -19,6 +19,7 @@
 namespace go\core\dav\davacl;
 
 use GO;
+use go\core\model\Acl;
 use go\core\model\User;
 use Sabre\CalDAV\Principal\User as PrincipalUser;
 use Sabre\DAV\PropPatch;
@@ -27,9 +28,11 @@ use Sabre\DAVACL\PrincipalBackend\AbstractBackend;
 
 class PrincipalBackend extends AbstractBackend {
 
+	private array $users;
+
 	private function modelToDAVUser(User $user) {
 
-		$data = array(
+		return array(
 				'id' => $user->id,
 				'uri' => 'principals/' . $user->username,
 				'{DAV:}displayname' => $user->displayName,
@@ -38,8 +41,6 @@ class PrincipalBackend extends AbstractBackend {
 				'{urn:ietf:params:xml:ns:caldav}schedule-inbox-URL' => new Href('principals/' . $user->username . '/inbox'),
 				'{urn:ietf:params:xml:ns:caldav}schedule-outbox-URL' => new Href('principals/' . $user->username . '/outbox')
 		);
-
-		return $data;
 	}
 
 	/**
@@ -64,7 +65,9 @@ class PrincipalBackend extends AbstractBackend {
 
 		if (!isset($this->users)) {
 			$this->users = [];
-			 $users = User::find(['id', 'username', 'displayName', 'email']);
+			 $users = User::find(['id', 'username', 'displayName', 'email'])
+				 ->filter(['permissionLevel' => Acl::LEVEL_READ]);
+
 			 foreach($users as $user) {
 				$this->users[] = $this->modelToDAVUser($user);
 			 }
@@ -97,7 +100,7 @@ class PrincipalBackend extends AbstractBackend {
 
 		$user = User::find(['id', 'username', 'displayName', 'email'])->where('username', '=', $username)->single();
 		if (!$user) {
-			return false;
+			return;
 		} elseif (isset($pathParts[2])) {
 			return array(
 					'uri' => $path,
@@ -155,10 +158,10 @@ class PrincipalBackend extends AbstractBackend {
 		if($prefixPath != "principals") {
 			return [];
 		}
-		
-		$query = go()->getDbConnection()
-						->selectSingleValue('username')
-						->from('core_user');
+
+		$query = User::find(['username'])
+			->filter(['permissionLevel' => Acl::LEVEL_READ])
+			->selectSingleValue('username');
 
 		foreach ($searchProperties as $property => $value) {
 
@@ -180,6 +183,8 @@ class PrincipalBackend extends AbstractBackend {
 		foreach($query as $username) {			
 			$principals[] = 'principals/' . $username;
 		}
+
+		go()->debug("Found ". count($principals) ." principals");
 
 		return $principals;
 	}

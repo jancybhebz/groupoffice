@@ -17,9 +17,9 @@ class MailStore extends Store implements ISearchProvider {
      * Creates or modifies a folder
      * The folder type is ignored in IMAP, as all folders are Email folders
      *
-     * @param StringHelper        $folderid       id of the parent folder
-     * @param StringHelper        $oldid          if empty -> new folder created, else folder is to be renamed
-     * @param StringHelper        $displayname    new folder name (to be created, or to be renamed to)
+     * @param string        $folderid       id of the parent folder
+     * @param string        $oldid          if empty -> new folder created, else folder is to be renamed
+     * @param string        $displayname    new folder name (to be created, or to be renamed to)
      * @param int           $type           folder type
      *
      * @access public
@@ -81,7 +81,7 @@ class MailStore extends Store implements ISearchProvider {
 	 * 
 	 * Direction: SERVER -> PHONE
 	 * 
-	 * @param StringHelper $folderid
+	 * @param string $folderid
 	 * @param int $id
 	 * @param SyncParameters $contentparameters
 	 * @return \SyncMail
@@ -514,7 +514,7 @@ class MailStore extends Store implements ISearchProvider {
 	 * 
 	 * Note: Not implemented because a mail message cannot be changed
 	 * 
-	 * @param StringHelper $folderid
+	 * @param string $folderid
 	 * @param int $id
 	 * @param \SyncTask $message
 	 * @return array
@@ -560,7 +560,7 @@ class MailStore extends Store implements ISearchProvider {
 	/**
 	 * Flag a message as read
 	 * 
-	 * @param StringHelper $folderid
+	 * @param string $folderid
 	 * @param int $id
 	 * @param int $flags
 	 * @return boolean
@@ -585,7 +585,7 @@ class MailStore extends Store implements ISearchProvider {
 	/**
 	 * Delete a message so it will be moved to the trashcan
 	 * 
-	 * @param StringHelper $folderid
+	 * @param string $folderid
 	 * @param int $id
 	 * @return boolean
 	 */
@@ -682,7 +682,7 @@ class MailStore extends Store implements ISearchProvider {
 	/**
 	 * Get the list of the items that need to be synced
 	 * 
-	 * @param StringHelper $folderid
+	 * @param string $folderid
 	 * @param type $cutoffdate
 	 * @return array
 	 */
@@ -703,16 +703,18 @@ class MailStore extends Store implements ISearchProvider {
 						ZLog::Write(LOGLEVEL_DEBUG, "empty cutoff");
 						$headers = $imap->get_flags();
 					} else {
-						ZLog::Write(LOGLEVEL_DEBUG, 'Client sent cutoff date for calendar: ' . date("j-M-Y", $cutoffdate));
+						ZLog::Write(LOGLEVEL_DEBUG, 'Client sent cutoff date for email: ' . date("j-M-Y", $cutoffdate));
 						$uids = $imap->search('SINCE ' . date("j-M-Y", $cutoffdate));
 						if (empty($uids)) {
 							return [];
 						}
-						$headers = $imap->get_flags(min($uids) . ':*');
+//						$uidRange = min($uids) . ':*';
+						ZLog::Write(LOGLEVEL_DEBUG, 'GET UID RANGE: ' . implode(", ", $uids). ', count: '. count($uids));
+						$headers = $imap->get_flags($uids);
 					}
 
 					if ($headers === false) {
-						ZLog::Write(LOGLEVEL_ERROR, "IMAP returned error reponse" . $imap->last_error());
+						ZLog::Write(LOGLEVEL_ERROR, "IMAP returned error response" . $imap->last_error());
 						return [];
 					}
 
@@ -744,7 +746,7 @@ class MailStore extends Store implements ISearchProvider {
 	/**
 	 * Get the syncFolder that is attached to the given id
 	 * 
-	 * @param StringHelper $id
+	 * @param string $id
 	 * @return \SyncFolder
 	 */
 	public function GetFolder($id) {

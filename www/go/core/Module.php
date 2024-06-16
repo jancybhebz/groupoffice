@@ -6,6 +6,9 @@ use Exception;
 use Faker\Generator;
 use GO\Base\Model\Module as LegacyModuleModel;
 use GO\Base\Module as LegacyModule;
+use go\core\model\Group;
+use go\core\model\Module as GoModule;
+use go\core\model\Permission;
 use go\core\Module as CoreModule;
 use go\core\orm\EntityType;
 use go\core\orm\Query;
@@ -385,6 +388,17 @@ abstract class Module extends Singleton {
 	 *
 	 * @param model\Module $model
 	 * @return bool
+	 * @example
+	 *
+	 * protected function beforeInstall(GoModule $model): bool
+	 * {
+	 * // Share module with Internal group
+	 * $model->permissions[Group::ID_INTERNAL] = (new Permission($model))
+	 * ->setRights(['mayRead' => true]);
+	 *
+	 * return parent::beforeInstall($model);
+	 * }
+	 *
 	 */
 	protected function beforeInstall(model\Module $model): bool
 	{
@@ -734,13 +748,14 @@ abstract class Module extends Singleton {
 	 */
 	public static function getIcon(): string
 	{
-		$icon = static::getFolder()->getFile('icon.png');
-		
-		if(!$icon->exists()) {
-			$icon = Environment::get()->getInstallFolder()->getFile('views/Extjs3/themes/Paper/img/default-avatar.svg');
-		}
-		
-		return 'data:'.$icon->getContentType().';base64,'. base64_encode($icon->getContents());
+		return go()->getAuthState()->getDownloadUrl('core/moduleIcon/'. static::getPackage() . '/' . static::getName().'&mtime='.go()->getSettings()->cacheClearedAt);
+//		$icon = static::getFolder()->getFile('icon.png');
+//
+//		if(!$icon->exists()) {
+//			$icon = Environment::get()->getInstallFolder()->getFile('views/Extjs3/themes/Paper/img/default-avatar.svg');
+//		}
+//
+//		return 'data:'.$icon->getContentType().';base64,'. base64_encode($icon->getContents());
 	}
 
 	private $model;

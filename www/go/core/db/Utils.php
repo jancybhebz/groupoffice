@@ -223,7 +223,10 @@ class Utils {
 		return self::quoteTableName($name);
 	}
 
-
+	/**
+	 * @param string $tableAndCol
+	 * @return Col
+	 */
 	public static function splitTableAndColumn(string $tableAndCol) : Col {
 		$dot = strpos($tableAndCol, '.');
 
@@ -242,24 +245,6 @@ class Utils {
 
 		return $col;
 	}
-	
-	
-	public static function isUniqueKeyException(PDOException $e) {
-		//Unique index error = 23000
-		if ($e->getCode() != 23000) {
-			return false;
-		}
-
-		$msg = $e->getMessage();
-		//App::get()->debug($msg);
-
-		if(preg_match("/key '(.*)'/", $msg, $matches)) {
-			return $matches[1];
-		}
-
-		return false;
-	}
-
 }
 
 

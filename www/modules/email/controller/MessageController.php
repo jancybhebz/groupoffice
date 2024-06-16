@@ -7,6 +7,8 @@ use Exception;
 use GO;
 use GO\Base\Exception\AccessDenied;
 use GO\Base\Exception\NotFound;
+use GO\Base\Mail\Exception\ImapAuthenticationFailedException;
+use GO\Base\Mail\Exception\MailboxNotFound;
 use GO\Base\Mail\Imap;
 use GO\Base\Mail\Mailer;
 use GO\Base\Mail\SmimeMessage;
@@ -172,6 +174,12 @@ class MessageController extends \GO\Base\Controller\AbstractController
 		return $response;
 	}
 
+	/**
+	 * @throws ImapAuthenticationFailedException
+	 * @throws AccessDenied
+	 * @throws MailboxNotFound
+	 * @throws NotFound
+	 */
 	protected function actionStore(array $params)
 	{
 
@@ -288,6 +296,19 @@ Settings -> Accounts -> Double click account -> Folders.", "email");
 		if(isset($params['searchIn']) && in_array($params['searchIn'], array('all', 'recursive'))) {
 			$searchIn = $params['searchIn'];
 			$response['multipleFolders'] = true;
+
+			if($searchIn == 'all') {
+
+				$allFolder = go()->getConfig()['community']['email']['allFolder'][$account->host] ?? "virtual/All";
+				if($account->justConnect()->select_mailbox($allFolder)) {
+					$params['mailbox'] = $allFolder;
+					$searchIn = 'current';
+				}
+			}
+		}
+
+		if(preg_match('/TEXT "(.*)"/', $query, $matches) && !$this->allowFTS($account, $imap)) {
+			$query = 'OR OR OR FROM "' .$matches[1] . '" SUBJECT "' .$matches[1] . '" TO "' .$matches[1] . '" CC "' .$matches[1] . '"';
 		}
 
 		$messages = ImapMessage::model()->find(
@@ -361,9 +382,20 @@ Settings -> Accounts -> Double click account -> Folders.", "email");
 		//deletes must be confirmed if no trash folder is used or when we are in the trash folder to delete permanently
 		$response['deleteConfirm'] = empty($account->trash) || $account->trash==$params['mailbox'];
 
+
+		//$response['allowFTS'] =
+
 		return $response;
 	}
-	
+
+
+	private function allowFTS (Account $account, $imap) :bool{
+
+		$forceFTS = go()->getConfig()['community']['email']['forceFTS'][$account->host] ?? false;
+
+
+		return $forceFTS || $imap->has_capability("XFTS");
+	}
 
 
 	/**
@@ -638,6 +670,7 @@ Settings -> Accounts -> Double click account -> Folders.", "email");
 		 * if you want ignore default sent folder message will be store in
 		 * folder wherefrom user sent it
 		 */
+
 		if ($account->ignore_sent_folder && !empty($params['reply_mailbox'])) {
 			$account->sent = $params['reply_mailbox'];
 		}
@@ -645,12 +678,13 @@ Settings -> Accounts -> Double click account -> Folders.", "email");
 		if ($success) {
 			//if a sent items folder is set in the account then save it to the imap folder
 			// auto linking will happen on save to sent items
-			if(!$account->saveToSentItems($message, $params)){
+			if (!$account->saveToSentItems($message, $params)) {
 				//$imap->append_message($account->sent, $message, "\Seen");
-				$response['success']=false;
-				$response['feedback'].='Failed to save sent item to '.$account->sent;
+				$response['success'] = false;
+				$response['feedback'] .= 'Failed to save sent item to ' . $account->sent;
 			}
-		}		
+		}
+
 
 		if (!empty($params['draft_uid'])) {
 			//remove drafts on send
@@ -1263,6 +1297,7 @@ Settings -> Accounts -> Double click account -> Folders.", "email");
 		$response = $imapMessage->toOutputArray(!$plaintext,false,$params['no_max_body_size']);
 		$response['uid'] = intval($params['uid']);
 		$response['mailbox'] = $params['mailbox'];
+		$response['isDraft'] = $params['mailbox'] == $account->drafts;
 		$response['account_id'] = intval($params['account_id']);
 		$response['do_not_mark_as_read'] = $account->do_not_mark_as_read;
 		$response = $this->_getContactInfo($imapMessage, $params, $response, $account);
@@ -1279,7 +1314,7 @@ Settings -> Accounts -> Double click account -> Folders.", "email");
 			
 		}
 		
-		$response['isInSpamFolder']=$this->_getSpamMoveMailboxName($params['uid'],$params['mailbox'],$account->id);
+		$response['isInSpamFolder']=$response['mailbox'] == $account->spam;
 
 		// START Handle the links div in the email display panel		
 		if(!$plaintext){
@@ -1309,19 +1344,7 @@ Settings -> Accounts -> Double click account -> Folders.", "email");
 
 		return $response;
 	}
-	
-	
-	protected function _getSpamMoveMailboxName($mailUid,$mailboxName,$accountId)
-	{
-		$pattern = "/^(junk|spam)$/";
-		if (preg_match($pattern, strtolower($mailboxName))) {
-			return 1;
-		} else {
-			return 0;
-		}
-		
-	}
-	
+
 	
 	protected function actionGet($account_id, $mailbox, $uid, $query="")
 	{
@@ -1544,6 +1567,9 @@ Settings -> Accounts -> Double click account -> Folders.", "email");
 		if (empty($params['unblock'])){// && !\GO\Addressbook\Model\Contact::model()->findSingleByEmail($response['sender'])) {
 			$blockUrl = 'about:blank';
 			$response['htmlbody'] = preg_replace("/<([^a]{1})([^>]*)(https?:[^>'\"]*)/iu", "<$1$2" . $blockUrl, $response['htmlbody'], -1, $response['blocked_images']);
+			if($response['htmlbody'] === null) {
+				throw new \Exception("Could not block images: ". preg_last_error_msg());
+			}
 		}
 
 		return $response;
@@ -2018,7 +2044,7 @@ Settings -> Accounts -> Double click account -> Folders.", "email");
 		$spamFolder = isset(GO::config()->spam_folder) ? GO::config()->spam_folder : $account->spam;
 
 		if (empty($spamFolder)) {
-			throw new \Exception(GO::t("Could not get 'Spam' folder. Maybe it is disabled.\n\nGo to E-mail -> Administration -> Accounts -> Double click account -> Folders to configure it.", "email"));
+			$spamFolder = 'Spam';
 		}
 
 		if(!$imap->get_status($spamFolder)){

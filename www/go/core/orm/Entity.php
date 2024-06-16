@@ -22,6 +22,7 @@ use go\core\util\StringUtil;
 use go\core\validate\ErrorCode;
 use go\core\model\Module;
 use GO\Files\Model\Folder;
+use InvalidArgumentException;
 use function go;
 use go\core\db\Query as DbQuery;
 use go\core\util\ArrayObject;
@@ -48,7 +49,14 @@ use go\core\util\ArrayObject;
  *
  */
 abstract class Entity extends Property {
-	
+
+	/**
+	 * Fires on validation
+	 *
+	 * @param Entity $entity The entity that will be saved
+	 */
+	const EVENT_VALIDATE = 'validate';
+
 	/**
 	 * Fires just before the entity will be saved
 	 * 
@@ -125,6 +133,7 @@ abstract class Entity extends Property {
 	 *
 	 */
 	const EVENT_FILTER_PERMISSION_LEVEL = "filterpermissionlevel";
+	private static array $entityType = [];
 
 	/**
 	 * Constructor
@@ -279,35 +288,19 @@ abstract class Entity extends Property {
 	 * @param array $ids
 	 * @param array $properties
 	 * @param bool $readOnly
-	 * @return static[]|Query
+	 * @return Query<$this>
 	 * @throws Exception
 	 */
-	public static final function findByIds(array $ids, array $properties = [], bool $readOnly = false) {
-		$tables = static::getMapping()->getTables();
-		$primaryTable = array_shift($tables);
-		$keys = $primaryTable->getPrimaryKey();
-		$keyCount = count($keys);
-		
+	public static final function findByIds(array $ids, array $properties = [], bool $readOnly = false): Query
+	{
 		$query = static::internalFind($properties, $readOnly);
-		
-		$idArr = [];
-		for($i = 0; $i < $keyCount; $i++) {			
-			$idArr[$i] = [];
-		}
-		
+
+		$keyCondition = new Criteria();
 		foreach($ids as $id) {
-			$idParts = explode('-', $id);
-			if(count($idParts) != $keyCount) {
-				throw new Exception("Given id is invalid (" . $id . "). Key must have " . $keyCount ." parts concatenated with a '-'.");
-			}
-			for($i = 0; $i < $keyCount; $i++) {			
-				$idArr[$i][] = $idParts[$i];
-			}
+			$keys = static::idToPrimaryKeys($id);
+			$keyCondition->orWhere($keys);
 		}
-		
-		for($i = 0; $i < $keyCount; $i++) {			
-			$query->where($keys[$i], 'IN', $idArr[$i]);
-		}
+		$query->where($keyCondition);
 		
 		return $query;
 	}
@@ -347,7 +340,6 @@ abstract class Entity extends Property {
 
 		$this->isSaving = true;
 
-//		go()->debug(static::class.'::save()' . $this->id());
 		App::get()->getDbConnection()->beginTransaction();
 
 		try {
@@ -396,6 +388,8 @@ abstract class Entity extends Property {
 				return;
 			}
 		}
+
+		static::fireEvent(static::EVENT_VALIDATE, $this);
 		parent::internalValidate();
 	}
 
@@ -470,7 +464,7 @@ abstract class Entity extends Property {
 		//Set select for overrides.
 		$primaryTable = static::getMapping()->getPrimaryTable();
 
-		$query->selectSingleValue( '`' . $primaryTable->getAlias() . '`.`id`')
+		$query->select( static::getPrimaryKey(true))
 			->from($primaryTable->getName(), $primaryTable->getAlias());
 
 		return $query;
@@ -566,7 +560,6 @@ abstract class Entity extends Property {
 			return false;
 		}
 
-		//$this->isDeleting = false;
 		$this->isSaving = false;
 
 		return true;
@@ -631,7 +624,7 @@ abstract class Entity extends Property {
 	 */
 	protected function canCreate(): bool
 	{
-		return true;
+		return go()->getAuthState() && go()->getAuthState()->isAdmin();
 	}
 
 	/**
@@ -663,15 +656,26 @@ abstract class Entity extends Property {
 		return null;
 	}
 
-  /**
-   * Finds the ACL id that holds this models permissions.
-   * Defaults to the module permissions it belongs to.
-   *
-   * @return int
-   */
+	/**
+	 * Finds the ACL id that holds this models permissions.
+	 * Defaults to the entity types' default ACL
+	 *
+	 * @return ?int
+	 * @throws Exception
+	 */
 	public function findAclId(): ?int
 	{
-		return null;
+		$mod = Module::findByName(static::getModulePackageName(), static::getModuleName());
+
+		return $mod->getShadowAclId();
+	}
+
+
+	public static function clearCache() : void
+	{
+		parent::clearCache();
+
+		static::$entityType = [];
 	}
 
 
@@ -684,18 +688,17 @@ abstract class Entity extends Property {
 	 */
 	public static function entityType(): EntityType
 	{
+		// We don't use go()->getCache() here because in SSE / PushDispatcher we want to disable cache in memory to keep
+		// memory as low as possible. But we must still cache these as it will lead to many overhead if we do not reuse it.
 		$cls = static::class;
-		$cacheKey = 'entity-type-' . $cls;
 
-		$t = go()->getCache()->get($cacheKey);
-		if($t !== null) {
-			return $t;
+		if(isset(self::$entityType[$cls])) {
+			return self::$entityType[$cls];
 		}
 
-		$t = EntityType::findByClassName($cls);
-		go()->getCache()->set($cacheKey, $t, false);			
-		
-		return $t;
+		self::$entityType[$cls] = EntityType::findByClassName(static::class);
+
+		return self::$entityType[$cls];
 	}
   
   /**
@@ -749,7 +752,7 @@ abstract class Entity extends Property {
 	protected static function defineFilters(): Filters
 	{
 
-		$filters = new Filters();
+		$filters = new Filters(static::class);
 
 		$filters
 			->add("permissionLevelUserId", function() {
@@ -1193,6 +1196,24 @@ abstract class Entity extends Property {
 	public static function converters(): array
 	{
 		return [Json::class];
+	}
+
+
+	/**
+	 * Find a converter for exporting or importing
+	 *
+	 * @param string $extension
+	 * @return AbstractConverter
+	 */
+	public static function findConverter(string $extension): AbstractConverter
+	{
+		foreach(static::converters() as $converter) {
+			if($converter::supportsExtension($extension)) {
+				return new $converter($extension, static::class);
+			}
+		}
+
+		throw new InvalidArgumentException("Converter for file extension '" . $extension .'" is not found');
 	}
 
 	/**

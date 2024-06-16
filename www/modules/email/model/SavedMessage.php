@@ -26,12 +26,15 @@ class SavedMessage extends ComposerMessage
 
 	/**
 	 * Get a model instance loaded from  MIME data string.
-	 * 
-	 * @param StringHelper $mimeData MIME data string
-	 * @return SavedMessage 
+	 *
+	 * @param ?string $mimeData MIME data string
+	 * @param bool $preserveHtmlStyle
+	 * @return SavedMessage
+	 * @throws \Exception
 	 */
-	public function createFromMimeData($mimeData, $preserveHtmlStyle = true)
+	public function createFromMimeData(?string $mimeData = "", bool $preserveHtmlStyle = true): SavedMessage
 	{
+		$mimeData = $mimeData ?? '';
 		$m = new SavedMessage();		
 		$m->setMimeData($mimeData, $preserveHtmlStyle);
 		return $m;
@@ -40,7 +43,7 @@ class SavedMessage extends ComposerMessage
 	/**
 	 * Reads a MIME file and creates a SavedMessage model from it.
 	 * 
-	 * @param StringHelper $path Relative path from file_storage_path or tmpdir where the MIME file is stored
+	 * @param string $path Relative path from file_storage_path or tmpdir where the MIME file is stored
 	 * @param bookean $isTempFile Indicates if path it relative from tmpdir or file_storage_path
 	 * @return SavedMessage
 	 */
@@ -58,13 +61,15 @@ class SavedMessage extends ComposerMessage
 		
 		return $this->createFromMimeData($mimeData, $preserveHtmlStyle);
 	}
-	
+
 	/**
 	 * Reads MIME data and creates a SavedMessage model from it.
-	 * @param StringHelper $mimeData The MIME data string.
-	 * @return SavedMessage 
+	 * @param string $mimeData The MIME data string.
+	 * @param bool $preserveHtmlStyle
+	 * @return void
+	 * @throws \Exception
 	 */
-	public function setMimeData($mimeData, $preserveHtmlStyle = true)
+	public function setMimeData(string $mimeData = "", bool $preserveHtmlStyle = true): void
 	{
 		$decoder = new \GO\Base\Mail\MimeDecode($mimeData);
 		$structure = $decoder->decode(array(
@@ -74,8 +79,9 @@ class SavedMessage extends ComposerMessage
 			'rfc_822bodies' => true
 		));
 		
-		if (!$structure)
+		if (!$structure) {
 			throw new \Exception("Could not decode mime data:\n\n $mimeData");
+		}
 
 		$attributes=array();
 		
@@ -184,7 +190,7 @@ class SavedMessage extends ComposerMessage
 					$body = \GO\Base\Util\StringHelper::clean_utf8($part->body, $charset);
 					
 					if (stripos($part->ctype_secondary, 'plain') !== false) {
-						$body = $preserveHtmlStyle ? '<div class="msg">' . nl2br($body) . '</div>' : nl2br($body);
+						$body = nl2br($body);
 					} else {
 						$body = \GO\Base\Util\StringHelper::convertLinks($body);
 						$body = \GO\Base\Util\StringHelper::sanitizeHtml($body, $preserveHtmlStyle);
@@ -252,7 +258,7 @@ class SavedMessage extends ComposerMessage
 			//convert text to html
 			if (stripos($structure->ctype_secondary, 'plain') !== false) {
 				$this->extractUuencodedAttachments($text_part);
-				$text_part = $preserveHtmlStyle ? '<div class="msg">' . nl2br($text_part) . '</div>' : nl2br($text_part);
+				$text_part = nl2br($text_part);
 			}else{
 				$text_part = \GO\Base\Util\StringHelper::convertLinks($text_part);
 				$text_part = \GO\Base\Util\StringHelper::sanitizeHtml($text_part, $preserveHtmlStyle);

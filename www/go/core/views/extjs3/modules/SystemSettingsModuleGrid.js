@@ -111,6 +111,13 @@ go.modules.SystemSettingsModuleGrid = Ext.extend(go.systemsettings.Panel, {
 				this.store.baseParams['query'] = v;
 				this.store.load();
 			}
+		}, {
+			xtype: "button",
+			iconCls: "ic-sort",
+			handler: () => {
+				const win = new go.modules.ModuleSortWindow();
+				win.show();
+			}
 		}];
 
 		this.store.on('update', this.draw,this);
@@ -230,6 +237,8 @@ go.modules.SystemSettingsModuleGrid = Ext.extend(go.systemsettings.Panel, {
 							xtype:'button',
 							cls: isInstalled ? 'primary' : '',
 							isInstalled : isInstalled,
+							enableToggle: true,
+							pressed: r.data.enabled,
 							text: r.data.enabled ? t('Disable') : (isInstalled ? t('Enable') : t('Install')),
 							disabled: r.data.not_installable,
 							record: r,
@@ -281,24 +290,6 @@ go.modules.SystemSettingsModuleGrid = Ext.extend(go.systemsettings.Panel, {
 			dlg.show(module, rights)
 		);
 	},
-
-
-	// showPermissions: function(moduleId, pkg, acl_id) {
-	// 	let name = t('name', moduleId, pkg);
-	// 	if (!this.permissionsWin) {
-	// 		this.permissionsWin = new go.modules.PermissionsWindow();
-	// 		this.permissionsWin.on('hide', function() {
-	// 			// Loop through the recently installed modules, allowing the user to
-	// 			// set the permissions, module by module.
-	// 			if (this.installedModules && this.installedModules.length) {
-	// 				var r = this.installedModules.shift();
-	// 				debugger;
-	// 				this.permissionsWin.show(r.id,r.package, r.name, r.acl_id);
-	// 			}
-	// 		}, this);
-	// 	}
-	// 	this.permissionsWin.show(moduleId, pkg, name, acl_id);
-	// },
 
 	warningRenderer: function(name, cell, record) {
 		return record.data.warning != '' ?

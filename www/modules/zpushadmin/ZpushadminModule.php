@@ -14,6 +14,11 @@ class ZpushadminModule extends \GO\Base\Module {
 		return array('sync');
 	}
 
+	public function adminModule()
+	{
+		return true;
+	}
+
 
 	public static function checkZPushVersion($versionToCompare) {
 		\GO::debug("Compare active z-push version with: " . $versionToCompare);
@@ -53,9 +58,8 @@ class ZpushadminModule extends \GO\Base\Module {
 		}
 
 			
-		require_once \GO::config()->root_path . 'modules/z-push/vendor/z-push/vendor/autoload.php';
-		require_once(\GO::config()->root_path . 'modules/z-push/backend/go/autoload.php');
-		require_once(\GO::config()->root_path . 'modules/z-push/config.php');
+		require_once(\GO::config()->root_path . 'modules/z-push/bootstrap.php');
+		require_once ZPUSH_CONFIG;
 
 
 		set_include_path(get_include_path() . PATH_SEPARATOR . BASE_PATH);

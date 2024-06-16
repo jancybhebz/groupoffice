@@ -113,7 +113,8 @@ GO.email.EmailClient = Ext.extend(Ext.Panel, {
 		hidden:messagesAtTop,
 		deleteConfig : deleteConfig,
 		header:false,
-		split:true
+		split:true,
+		minWidth: dp(300)
 	});
 	this.addGridHandlers(this.leftMessagesGrid);
 
@@ -152,14 +153,17 @@ GO.email.EmailClient = Ext.extend(Ext.Panel, {
 
 			var query;
 
-			if(search_type == 'any'){
-				query = 'OR OR OR FROM "' + GO.email.search_query + '" SUBJECT "' + GO.email.search_query + '" TO "' + GO.email.search_query + '" CC "' + GO.email.search_query + '"';
-			} else if(search_type=='fts') {
+			if(search_type == 'any' || search_type == 'fts'){
+				// if the server does not support FTS it will be converted into a search for subject, from, to, cc
 				query = 'TEXT "' + GO.email.search_query + '"';
 			} else {
 				query = search_type.toUpperCase() + ' "' + GO.email.search_query + '"';
 			}
 			store.baseParams['query'] = query;
+
+			if(GO.email.search_in) {
+				store.baseParams.searchIn = GO.email.search_in;
+			}
 			
 		} else if(!this.searchDialog.hasSearch && store.baseParams['query']) {
 			this.resetSearch();
@@ -340,6 +344,21 @@ GO.email.EmailClient = Ext.extend(Ext.Panel, {
 			},
 			scope: this
 		},
+			this.editButton=new Ext.Button({
+				hidden:true,
+				iconCls: 'ic-edit',
+				text: GO.util.isMobileOrTablet() ? "" : t("Edit", "email"),
+				handler: function(){
+					GO.email.showComposer({
+						uid: this.messagePanel.uid,
+						task: 'opendraft',
+						template_id: 0,
+						mailbox: this.messagePanel.mailbox,
+						account_id: this.account_id
+					});
+				},
+				scope: this
+			}),
 			this.replyButton=new Ext.Button({
 				disabled:true,
 				iconCls: 'ic-reply',
@@ -432,18 +451,12 @@ GO.email.EmailClient = Ext.extend(Ext.Panel, {
 		]});
 
 	if(!GO.util.isMobileOrTablet()) {
-
-
 		this.messageTbar.insert(-2,{
 			hidden: !GO.email.saveAsItems || !GO.email.saveAsItems.length,
 			iconCls: 'ic-save',
 			text:t("Save as"),
 			menu:this.gridContextMenu.saveAsMenu
 		});
-
-
-
-
 	}
 
 		this.messageTbar.insert(-1, {
@@ -472,7 +485,8 @@ GO.email.EmailClient = Ext.extend(Ext.Panel, {
 		split: true,
 		narrowWidth: dp(400), //this will only work for panels inside another panel with layout=responsive. Not ideal but at the moment the only way I could make it work
 		width: dp(700),
-		minWidth: dp(300),
+		minWidth: dp(600),
+		narrowMinWidth: dp(300),
 		stateId: 'go-email-west',
 		items: [			
 			this.leftMessagesGrid,
@@ -498,10 +512,13 @@ GO.email.EmailClient = Ext.extend(Ext.Panel, {
 			if(!GO.util.empty(data.do_not_mark_as_read)) {
 				this.messagePanel.do_not_mark_as_read = data.do_not_mark_as_read;
 			}
+			this.editButton.setVisible(data.isDraft);
+
+			this.replyAllButton.setVisible(!data.isDraft);
+			this.replyButton.setVisible(!data.isDraft);
+
 			this.replyAllButton.setDisabled(this.readOnly && !this._permissionDelegated);
 			this.replyButton.setDisabled(this.readOnly && !this._permissionDelegated);
-			this.forwardButton.setDisabled(this.readOnly && !this._permissionDelegated);
-			// this.printButton.setDisabled(false);//this.readOnly && !this._permissionDelegated);
 
 			var record = this.messagesGrid.store.getById(this.messagePanel.uid);
 
@@ -627,22 +644,6 @@ GO.email.EmailClient = Ext.extend(Ext.Panel, {
 			}
 			this.messagePanel.show();
 		},this)
-
-		// grid.getSelectionModel().on('selectionchange', function(grid, rowIndex, r){
-		// 	if(r.data['uid']!=this.messagePanel.uid)
-		// 	{
-		// 		//this.messagePanel.uid=r.data['uid'];
-		// 		//this.messagePanel.loadMessage(r.data.uid, this.mailbox, this.account_id);
-		// 		this.messagePanel.loadMessage(r.data.uid, r.data['mailbox'], this.account_id);
-		// 		this.messagePanel.show();
-		// 		if(!r.data.seen && this.messagesGrid.store.reader.jsonData.permission_level > GO.permissionLevels.read){
-		// 			//set read with 2 sec delay.
-		// 			//this.markAsRead.defer(2000, this, [r.data.uid, this.mailbox, this.account_id]);
-		// 			this.markAsRead.defer(2000, this, [r.data.uid, r.data['mailbox'], this.account_id]);
-		// 		}
-		// 	}
-		// }, this, {buffer: 1})
-		//this.messagesGrid.getSelectionModel().on("rowselect",function(sm, rowIndex, r){
 	},
 
 	markAsRead : function(uid, mailbox, account_id){
@@ -787,7 +788,6 @@ GO.email.EmailClient = Ext.extend(Ext.Panel, {
 			this.treePanel.loader.baseParams.refresh = true;
 		}
 		this.treePanel.root.reload();
-		// this.messagesStore.removeAll();
 
 		if(refresh) {
 			delete this.treePanel.loader.baseParams.refresh;
@@ -909,19 +909,18 @@ GO.email.EmailClient = Ext.extend(Ext.Panel, {
 	},
 
 	addSendersToAddresslist : function(data) {
-		var records = this.messagesGrid.getSelectionModel().getSelections();
+		const records = this.messagesGrid.getSelectionModel().getSelections();
 
-		var emails=[];
-		var from =[];
-		for(var i=0;i<records.length;i++) {
+		let emails=[], from =[];
+		for(let i=0; i<records.length; i++) {
 			from.push(records[i].get('from'));
 			emails.push(records[i].get('sender'));
 		}
-		var dialog = new GO.email.AddressListDialog({
-			email:emails[0],
+		const dialog = new GO.email.AddressListDialog({
+			email: emails[0],
 			from: from[0],
 			delete: false,
-			title: t("Add to address list","email")
+			title: t("Add to address list", "email")
 		});
 		dialog.show();
 	},
@@ -976,16 +975,18 @@ GO.mainLayout.onReady(function(){
 		//go.Notifier.toggleIcon('email',data.email_status.total_unseen > 0);
 		GO.mainLayout.setNotification('email',data.email_status.total_unseen,'green');
 
-		var ep = GO.mainLayout.getModulePanel('email');
+		if(GO.mainLayout.panelIsVisible('email')) {
+			var ep = GO.mainLayout.getModulePanel('email', false);
 
-		if(ep) {
-			for(var i=0;i<data.email_status.unseen.length;i++) {
-				var s = data.email_status.unseen[i];
-				var changed = ep.updateFolderStatus(s.mailbox, s.unseen,s.account_id);
-				if(changed && ep.messagesGrid.store.baseParams.mailbox==s.mailbox && ep.messagesGrid.store.baseParams.account_id==s.account_id) {
-					ep.messagesGrid.store.reload({
-						keepScrollPosition: true
-					});
+			if (ep) {
+				for (var i = 0; i < data.email_status.unseen.length; i++) {
+					var s = data.email_status.unseen[i];
+					var changed = ep.updateFolderStatus(s.mailbox, s.unseen, s.account_id);
+					if (changed && ep.messagesGrid.store.baseParams.mailbox == s.mailbox && ep.messagesGrid.store.baseParams.account_id == s.account_id) {
+						ep.messagesGrid.store.reload({
+							keepScrollPosition: true
+						});
+					}
 				}
 			}
 		}
@@ -1234,11 +1235,6 @@ GO.email.openAttachment = function(attachment, panel, forceDownload) {
 					}
 
 				default:
-					if(Ext.isSafari || Ext.isGecko) {
-						// must be opened before any async processes happen
-						go.util.getDownloadTargetWindow();
-					}
-
 					if(go.Modules.isAvailable('legacy', 'files') && attachment.name.toLowerCase() != 'winmail.dat') {
 						return GO.files.openEmailAttachment(attachment, panel, false);
 					} else {

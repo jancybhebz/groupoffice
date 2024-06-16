@@ -23,24 +23,24 @@ class TemplateController extends \GO\Base\Controller\AbstractModelController{
 	protected function remoteComboFields() {
 		return array(
 				'user_name'=>'$model->user->name',
-			'group_id' => '$model->getGroupName()'
+			'group_id' => '$model->group->name'
 		);
 	}
-	
-	protected function getStoreParams($params) {
+
+	protected function getStoreParams($params)
+	{
+		$findParams = \GO\Base\Db\FindParams::newInstance();
+		$findParams->joinRelation('group', 'left');
 		$params['type'] = 0;
-		if(isset($params['type'])){
-			$findParams = \GO\Base\Db\FindParams::newInstance();
-			
+		if (isset($params['type'])) {
 			$findParams->getCriteria()->addCondition('type', $params['type']);
-			return $findParams;
 		}
-		
-		//return parent::getStoreParams($params);
+		return $findParams;
 	}
 	
 	protected function beforeStore(&$response, &$params, &$store) {
 		$store->setDefaultSortOrder('name');
+
 		return parent::beforeStore($response, $params, $store);
 	}
 
@@ -57,11 +57,7 @@ class TemplateController extends \GO\Base\Controller\AbstractModelController{
 	protected function afterSubmit(&$response, &$model, &$params, $modifiedAttributes) {
 		$message = \GO\Email\Model\SavedMessage::model()->createFromMimeData($model->content, false);
 		$response['htmlbody'] = $message->getHtmlBody();
-		
-		// reset the temp folder created by the core controller
-//		$tmpFolder = new \GO\Base\Fs\Folder(\GO::config()->tmpdir . 'uploadqueue');
-//		$tmpFolder->delete();
-		
+
 		parent::afterSubmit($response, $model, $params, $modifiedAttributes);
 	}
 	
@@ -80,9 +76,11 @@ class TemplateController extends \GO\Base\Controller\AbstractModelController{
 	
 	protected function formatColumns(\GO\Base\Data\ColumnModel $columnModel) {
 		$columnModel->formatColumn('user_name', '$model->user->name');
+		$columnModel->formatColumn('permissionLevel', '$model->permissionLevel');
 		$columnModel->formatColumn('group_name', function($model) {
+//			return $model->group->name ?? '';
 			return $model->getGroupName();
-		});
+		},[], ['group.name']);
 		return parent::formatColumns($columnModel);
 	}
 
@@ -112,6 +110,11 @@ class TemplateController extends \GO\Base\Controller\AbstractModelController{
 
 		
 		$this->_defaultTemplate = !empty($params['account_id']) && $defTempForAccount->template_id ? $defTempForAccount : $defTempForUser;
+
+		if (!isset($params['sort'])) {
+			$params['sort'] = 'name';
+			$params['dir'] = 'ASC';
+		}
 		
 		if(isset($params['default_template_id']))
 		{
@@ -125,15 +128,19 @@ class TemplateController extends \GO\Base\Controller\AbstractModelController{
 		}
 		
 		$store = new \GO\Base\Data\DbStore('GO\Base\Model\Template',new \GO\Base\Data\ColumnModel('GO\Base\Model\Template'),$params);
-		$store->getFindParams()->getCriteria()->addCondition('type', \GO\Base\Model\Template::TYPE_EMAIL);
+
 		$store->getColumnModel()->setFormatRecordFunction(array($this, 'formatEmailSelectionRecord'));
-		
+		$store->getColumnModel()->formatColumn('group_name', '$model->getGroupName()', [], 'group.name');
 		$store->addRecord(array(
 			'group' => 'templates',
 			'checked'=>isset($this->_defaultTemplate->template_id) && $this->_defaultTemplate->template_id==0,
-			'text' => \GO::t("None", "legacy", "email"),
+			'name' => \GO::t("None", "legacy", "email"),
 			'template_id'=>0
 		));
+
+		$store->getFindParams()
+			->joinRelation("group", "left")
+			->getCriteria()->addCondition('type', \GO\Base\Model\Template::TYPE_EMAIL);
 		
 		$response = $store->getData();
 		
@@ -176,8 +183,7 @@ class TemplateController extends \GO\Base\Controller\AbstractModelController{
 		$stmt = \GO\Base\Model\Template::model()->find($findParams);
 		
 		$store = \GO\Base\Data\Store::newInstance(\GO\Base\Model\Template::model());		
-//		$store->getColumnModel()->setFormatRecordFunction(array($this, 'formatEmailSelectionRecord'));
-		
+
 		$store->setStatement($stmt);
 		
 		$response = $store->getData();

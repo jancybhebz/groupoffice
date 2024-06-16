@@ -282,6 +282,14 @@ class Settings extends core\Settings {
 
 
 	/**
+	 * Maximum password length to prevent brute force attacks with large data.
+	 *
+	 * @var int
+	 */
+	public $passwordMaxLength = 255;
+
+
+	/**
 	 * Number of seconds to auto logout the user if inactive.
 	 * Also disables the "remember login" feature as it would make no sense.
 	 * @var int
@@ -707,6 +715,10 @@ class Settings extends core\Settings {
 	{
 		if($this->isModified('license')) {
 			if(isset($this->license)) {
+				if(!go()->getEnvironment()->hasIoncube()) {
+					throw new Exception("Please install SourceGuardian to use a license.");
+				}
+
 				$data = License::getLicenseData();
 				if (!$data) {
 					throw new Exception("License data was corrupted");

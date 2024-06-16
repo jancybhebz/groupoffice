@@ -64,6 +64,19 @@ class Template extends \GO\Base\Db\ActiveRecord{
 		return parent::model($className);
 	}
 
+	public function relations()
+	{
+		return [
+			'group' => array(
+	 				'type'=>self::BELONGS_TO,
+	 				'model'=>'GO\Base\Model\TemplateGroup',
+	 				'field'=>'group_id',
+	 				'labelAttribute'=>function($model){return $model->relation->name;} //this will automatically supply the label for a combobox in a JSON request.
+
+				)
+		];
+	}
+
 	public function getGroupName() {
 		$group = TemplateGroup::model()->findByPk($this->group_id);
 		return !empty($group) ? $group->name : '('.go()->t('None').')';
@@ -126,8 +139,8 @@ class Template extends \GO\Base\Db\ActiveRecord{
 	/**
 	 * Add a default tag value.
 	 * 
-	 * @param StringHelper $key
-	 * @param StringHelper $value 
+	 * @param string $key
+	 * @param string $value
 	 */
 	public function addDefaultTag($key, $value){
 		$this->_defaultTags[$key]=$value;
@@ -368,10 +381,10 @@ class Template extends \GO\Base\Db\ActiveRecord{
 	 * 
 	 * {user:modelAttributeName}
 	 * 
-	 * @param StringHelper $content Containing the tags
+	 * @param string $content Containing the tags
 	 * @param Contact $contact
 	 * @param boolean $leaveEmptyTags Set to true if you don't want unreplaced tags to be cleaned up.
-	 * @return StringHelper 
+	 * @return string
 	 */
 	public function replaceContactTags($content, \go\modules\community\addressbook\model\Contact $contact, $leaveEmptyTags=false){		
 		return $this->replaceModelTags($content, $contact, 'contact:', $leaveEmptyTags);
@@ -385,11 +398,11 @@ class Template extends \GO\Base\Db\ActiveRecord{
 	 * 
 	 * {$tagPrefix:modelAttributeName}
 	 * 
-	 * @param StringHelper $content Containing the tags
+	 * @param string $content Containing the tags
 	 * @param \GO\Base\Db\ActiveRecord $model
-	 * @param StringHelper $tagPrefix
+	 * @param string $tagPrefix
 	 * @param boolean $leaveEmptyTags Set to true if you don't want unreplaced tags to be cleaned up.
-	 * @return StringHelper 
+	 * @return string
 	 */
 	public function replaceModelTags($content, $model, $tagPrefix='', $leaveEmptyTags=false){
 		$attributes = $leaveEmptyTags ? array() : $this->_defaultTags;
@@ -461,9 +474,9 @@ class Template extends \GO\Base\Db\ActiveRecord{
 	 * 
 	 * {user:modelAttributeName}
 	 * 
-	 * @param StringHelper $content Containing the tags
+	 * @param string $content Containing the tags
 	 * @param boolean $leaveEmptyTags Set to true if you don't want unreplaced tags to be cleaned up.
-	 * @return StringHelper 
+	 * @return string
 	 */
 	public function replaceUserTags($content, $leaveEmptyTags=false){
 		$attributes = $leaveEmptyTags ? array() : $this->_defaultTags;
@@ -482,38 +495,22 @@ class Template extends \GO\Base\Db\ActiveRecord{
 	 * 
 	 * {$key}
 	 * 
-	 * @param StringHelper $content Containing the tags
+	 * @param string $content Containing the tags
 	 * @param array $attributes
 	 * @param boolean $leaveEmptyTags Set to true if you don't want unreplaced tags to be cleaned up.
-	 * @return StringHelper 
+	 * @return string
 	 */
 	public function replaceCustomTags($content, $attributes, $leaveEmptyTags=false){
 		return $this->_parse($content, $attributes, $leaveEmptyTags);
 	}
 
-//	/**
-//	 * @return \GO\Email\Model\SavedMessage
-//	 */
-//	private function _getMessage(){
-//		if(!isset($this->_message)){
-//			
-//			//todo getFromMimeData
-//			$this->_message = \GO\Email\Model\SavedMessage::model()->createFromMimeData($this->content);
-//
-//		}
-//		return $this->_message;
-//	}
-//	protected function getBody(){
-//		return $this->_getMessage()->getHtmlBody();
-//	}
-	
 	
 	/**
 	 * Replace the {link} tag with a div
 	 * 
-	 * @param StringHelper $content
+	 * @param string $content
 	 * @param \GO\Email\Model\SavedMessage $message
-	 * @return StringHelper
+	 * @return string
 	 */
 	public function replaceLinkTag($content, $message){
 		
@@ -527,11 +524,11 @@ class Template extends \GO\Base\Db\ActiveRecord{
 	 * When the tag is found, then replace the image inside the ODF file with the 
 	 * replacement image.
 	 *  
-	 * @param StringHelper $content		The XML content file of the ODF.
+	 * @param string $content		The XML content file of the ODF.
 	 * @param \GO\Base\Fs\Folder $extractedOdfFolder	The folder object of the extracted ODF file
-	 * @param StringHelper $tag		The tag to search for in the content
+	 * @param string $tag		The tag to search for in the content
 	 * @param \GO\Base\Fs\File $replacementImage		The image that needs to be replaced
-	 * @return StringHelper The XML content file of the ODF.
+	 * @return string The XML content file of the ODF.
 	 */
 	public function replaceODFImage($content, \GO\Base\Fs\Folder $extractedOdfFolder, $tag, \GO\Base\Fs\File $replacementImage){
 			

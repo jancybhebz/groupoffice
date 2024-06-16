@@ -81,6 +81,12 @@ class Session extends Observable{
 	
 			session_name('groupoffice');
 
+			// prevents altering headers. This caused a security issue where the expires header would be different on lost
+			// password requests when a valid email address was used.
+			session_cache_limiter("");
+			header('Cache-Control: no-cache, no-store, must-revalidate');
+			header('Pragma: no-cache');
+			header('Expires: 01-07-2003 12:00:00 GMT');
 			session_start();				
 		}
 	
@@ -124,7 +130,7 @@ class Session extends Observable{
 	 * 
 	 * eg. index.php?r=test&security_token=token
 	 * 
-	 * @return StringHelper
+	 * @return string
 	 */
 	public function securityToken(){
 		return $this->values['security_token'];
@@ -133,7 +139,7 @@ class Session extends Observable{
 	/**
 	 * Return session ID
 	 * 
-	 * @return StringHelper
+	 * @return string
 	 */
 	public function id(){
 		return session_id();
@@ -195,10 +201,9 @@ class Session extends Observable{
 	 * @access public
 	 * @return void
 	 */
-	public function logout() {
-		
-//		$username = isset(self::$username) ? self::$username : 'notloggedin';		
-		$username = \GO::user() ? \GO::user()->username : self::USERNAME_NOTLOGGEDIN;				
+	public function logout()
+	{
+		$username = \GO::user() ? \GO::user()->username : self::USERNAME_NOTLOGGEDIN;
 		
 		\GO::debug("Logout called for ".$username);
 		
@@ -293,8 +298,8 @@ class Session extends Observable{
 	/**
 	 * Logs a user in.
 	 * 
-	 * @param StringHelper $username
-	 * @param StringHelper $password
+	 * @param string $username
+	 * @param string $password
 	 * @param Boolean $countLogin
 	 * 
 	 * @return Model\User or false on failure.
@@ -428,10 +433,8 @@ class Session extends Observable{
 	 * @param int/Model\User $user_id
 	 * @param int $originalUserId  Remember the original user
 	 */
-	public function setCurrentUser($user_id, $originalUserId=false) {
-
-//		if(\GO::modules()->isInstalled("log"))
-//			\GO\Log\Model\Log::create ("setcurrentuser", "Set user ID to $user_id");
+	public function setCurrentUser($user_id, $originalUserId=false)
+	{
 		if(!empty($originalUserId)){
 			$this->values['original_user_id'] = $originalUserId;
 		}
@@ -439,16 +442,16 @@ class Session extends Observable{
 		if($user_id  instanceof Model\User){
 			$this->_user=$user_id;
 			$this->values['user_id']=$user_id->id;
-		}else
-		{
+		} else {
 			//remember user id in session
 			$this->values['user_id']=$user_id;
 		}
 		
 		
 		
-		if(!\GO::user())
-			throw new \Exception("Could not set user with id ".$user_id." in Session::setCurrentUser()!");
+		if(!\GO::user()) {
+			throw new \Exception("Could not set user with id " . $user_id . " in Session::setCurrentUser()!");
+		}
 		
 		date_default_timezone_set(\GO::user()->timezone);
 		
@@ -457,13 +460,13 @@ class Session extends Observable{
 		//for logging
 		\GO::session()->values['username']=\GO::user()->username;
     
-    if(isset(\GO::session()->values['accessToken'])) {
-      $token = \go\core\model\Token::find()->where(['accessToken' => \GO::session()->values['accessToken']])->single();
-      $token->userId = $user_id;
-      if(!$token->save()) {
-        throw new \Exception("Could not set token");
-      }
-    }
+	    if(isset(\GO::session()->values['accessToken'])) {
+			$token = \go\core\model\Token::find()->where(['accessToken' => \GO::session()->values['accessToken']])->single();
+			$token->userId = $user_id;
+			if(!$token->save()) {
+				throw new \Exception("Could not set token");
+			}
+	    }
 
 		if (!empty(\GO::config()->debug_usernames)) {
 			if (in_array(\GO::user()->username, \GO::config()->debug_usernames)){

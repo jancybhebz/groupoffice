@@ -38,6 +38,7 @@ use go\core\orm\EntityType;
 use GO\Email\Model\Account;
 use GO\Leavedays\Model\Leaveday;
 use go\modules\community\tasks\model\Task;
+use go\modules\udo\forms\model\RoofReport;
 
 class EventController extends \GO\Base\Controller\AbstractModelController {
 
@@ -993,8 +994,11 @@ class EventController extends \GO\Base\Controller\AbstractModelController {
 					
 				if(\GO::modules()->tasks && empty($params['events_only'])){
 					$response = $this->_getTaskResponseForPeriod($response,$calendar,$startTime,$endTime);
-				}				
-				
+				}
+				if(Module::isInstalled("udo", "forms")){
+					$response = $this->_getDakResponseForPeriod($response,$calendar,$startTime,$endTime);
+				}
+
 				$response = $this->_getEventResponseForPeriod($response,$calendar,$startTime,$endTime, $categories);
 				
 			} catch(\GO\Base\Exception\AccessDenied $e){
@@ -1046,7 +1050,7 @@ class EventController extends \GO\Base\Controller\AbstractModelController {
 		ksort($response['results']);
 		
 		//Remove the index from the response array
-		$response['results']= array_values($response['results']);
+		$response['results'] = array_values($response['results']);
 
 		$response['success']=true;
 			
@@ -1063,13 +1067,57 @@ class EventController extends \GO\Base\Controller\AbstractModelController {
 		return $response;
 	}
 
+	private function _getDakResponseForPeriod($response,$calendar,$startTime,$endTime) {
+
+		if($calendar->name !== 'Dakmeldingen')
+			return $response;
+
+
+		$background = "ffed9e";
+		// If you are showing more than one calendar, then change the display
+		// color of the current event to the color of the calendar it belongs to.
+		if($response['calendar_count'] > 1 && $this->overrideColors){
+			$background = $calendar->getColor(\GO::user()->id);
+			if(empty($background))
+				$background = $calendar->displayColor;
+		}
+
+		$dakStmt = \go\modules\udo\forms\model\RoofReport::find()
+				->where('date', "IS NOT", null)
+			->andWhere('date', ">=", new \DateTime($startTime))
+			->andWhere('date', "<=", new \DateTime($endTime));
+
+		foreach($dakStmt as $report) {
+			$end = (clone $report->date)->add(new \DateInterval('PT' . ($report->duration ?? 3600) . 'S'));
+
+			$response['results'][$this->_getIndex($response['results'], 'R'.$report->id)] = [
+				'id' => 'R'.$report->id,
+				//'link_count' => $task->countLinks(),
+				'name' =>  ($report->type == RoofReport::TYPE_LEAKAGE ? "Lekkage: " : "Dakwerk: ") . $report->reference() . ' ' . $report->title,
+				'description' => $report->contactName,
+				'time' => $report->date->format('H:i'),
+				'start_time' => $report->date->format('Y-m-d H:i'),
+				'end_time' => $end->format('Y-m-d H:i'),
+				'all_day_event' => 0,
+				'model_name' => 'go\modules\udo\forms\model\RoofReport', // compat for UI
+				'calendar_id' => $calendar->id, // Must be present to be able to show tasks in the calendar Views
+				'background'=>$background,
+				//'day' => $dayValue,
+				'read_only' => true,
+				'report_id' => $report->id
+			];
+		}
+
+		return $response;
+	}
+
 	private function _getTaskResponseForPeriod($response,$calendar,$startTime,$endTime) {
 //
 //		go()->debug($calendar->visible_tasklists->stmt->debugDumpParams());
 
 		$tasklistIds = $calendar->visible_tasklists->stmt->fetchAll(\PDO::FETCH_COLUMN, 1);
 
-		$this->_tasklists = [];
+		//$this->_tasklists = [];
 //		while($tasklist = $tasklists->fetch()){
 //			$lists[$tasklist->id] = $tasklist->name;
 //		}
@@ -1197,8 +1245,8 @@ class EventController extends \GO\Base\Controller\AbstractModelController {
 	 * 
 	 * @param array $response
 	 * @param \GO\Calendar\Model\Calendar $calendar
-	 * @param StringHelper $startTime
-	 * @param StringHelper $endTime
+	 * @param string $startTime
+	 * @param string $endTime
 	 * @return array 
 	 */
 	private function _getHolidayResponseForPeriod($response,$calendar,$startTime,$endTime){
@@ -1239,8 +1287,8 @@ class EventController extends \GO\Base\Controller\AbstractModelController {
 	 * 
 	 * @param array $response
 	 * @param \GO\Calendar\Model\Calendar $calendar
-	 * @param StringHelper $startTime
-	 * @param StringHelper $endTime
+	 * @param string $startTime
+	 * @param string $endTime
 	 * @return array 
 	 */
 	private function _getLeavedaysResponseForPeriod($response,$calendar,$startTime,$endTime){
@@ -1284,8 +1332,8 @@ class EventController extends \GO\Base\Controller\AbstractModelController {
 	 * 
 	 * @param array $response
 	 * @param \GO\Calendar\Model\Calendar $calendar
-	 * @param StringHelper $startTime
-	 * @param StringHelper $endTime
+	 * @param string $startTime
+	 * @param string $endTime
 	 * @return array 
 	 */
 	private function _getBirthdayResponseForPeriod($response,$calendar,$startTime,$endTime){
@@ -1371,8 +1419,8 @@ class EventController extends \GO\Base\Controller\AbstractModelController {
 	 * 
 	 * @param array $response
 	 * @param \GO\Calendar\Model\Calendar $calendar
-	 * @param StringHelper $startTime
-	 * @param StringHelper $endTime
+	 * @param string $startTime
+	 * @param string $endTime
 	 * @return array 
 	 */
 	private function _getEventResponseForPeriod($response,$calendar,$startTime,$endTime, $categories){	

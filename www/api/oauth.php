@@ -56,6 +56,7 @@ class OAuthController {
 
 			// OpenID Connect Response Type
 			$responseType = new IdTokenResponse(new repositories\UserRepository(), new ClaimExtractor());
+			$responseType->setKid($this->getKid());
 
 			$this->server = new AuthorizationServer(
 				$clientRepository,
@@ -135,7 +136,7 @@ class OAuthController {
 			return $exception->generateHttpResponse($response);
 		} catch (Exception $exception) {
 			
-			ErrorHandler::logException($e);
+			ErrorHandler::logException($exception);
 
 			$body = new StreamAlias(fopen('php://temp', 'rb+'));
 			$body->write($exception->getMessage());
@@ -332,6 +333,16 @@ class OAuthController {
 	}
 
 	/**
+	 * @return string
+	 * @throws \Exception
+	 */
+	private function getKid()
+	{
+		$pubKey = $this->getPublicKeyFile()->getContents();
+		return md5($pubKey);
+	}
+
+	/**
 	 * @return MessageTraitAlias|Response
 	 */
 	public function certs()
@@ -354,7 +365,7 @@ class OAuthController {
 				'use' => 'sig',
 				'alg' => 'RS256',
 				'kty' => 'RSA',
-				'kid' => md5($pubKey),
+				'kid' => $this->getKid(),
 			];
 
 			//write to body

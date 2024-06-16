@@ -10,6 +10,7 @@ use go\core\App;
 use go\core\data\Model;
 use go\core\db\Column;
 use go\core\db\Criteria;
+use go\core\db\DbException;
 use go\core\db\Statement;
 use go\core\db\Utils;
 use go\core\event\EventEmitterTrait;
@@ -278,89 +279,126 @@ abstract class Property extends Model {
 	private function initRelations(): void
 	{
 		foreach ($this->getFetchedRelations() as $relation) {
-			$cls = $relation->propertyName;
+			$this->internalFetchRelation($relation);
+		}
+	}
 
-			$where = $this->buildRelationWhere($relation);
+	/**
+	 * Check if a property was fetched in the {@see Entity::find()} method.
+	 *
+	 * @param string $propName
+	 * @return bool
+	 */
+	public function isFetched(string $propName): bool
+	{
+		return in_array($propName, $this->fetchProperties);
+	}
 
-			// Should query when property is not new but also when there's an empty where.
-			// this means there is no foreign key and all records can be shown.
-			// this is used in {@see \go\modules\business\support\model\Settings} for example.
-			$shouldQuery = !$this->isNew() || !count($where);
+	/**
+	 * Manually fetch a relation if it was not fetched in the {@see Entity::find()} method.
+	 *
+	 * @param string $name
+	 * @return void
+	 * @throws Exception
+	 */
+	public function fetchRelation(string $name): void
+	{
+		if($this->isFetched($name)) {
+			return;
+		}
 
-			switch($relation->type) {
+		$relation = static::getMapping()->getRelation($name);
+		if(!$relation) {
+			throw new LogicException("Relation $name doesn't exist");
+		}
 
-				case Relation::TYPE_HAS_ONE:
-					if(!$shouldQuery) {
+		$this->internalFetchRelation($relation);
+	}
+
+	protected function internalFetchRelation(Relation $relation): void
+	{
+		$cls = $relation->propertyName;
+
+		$where = $this->buildRelationWhere($relation);
+
+		// Should query when property is not new but also when there's an empty where.
+		// this means there is no foreign key and all records can be shown.
+		// this is used in {@see \go\modules\business\support\model\Settings} for example.
+		$shouldQuery = !$this->isNew() || !count($where);
+
+		switch($relation->type) {
+
+			case Relation::TYPE_HAS_ONE:
+				if(!$shouldQuery) {
+					$prop = null;
+				} else
+				{
+					$stmt = $this->queryRelation($cls, $where, $relation, $this->readOnly, $this);
+					$prop = $stmt->fetch();
+					$stmt->closeCursor();
+					if(!$prop) {
 						$prop = null;
-					} else
-					{
-						$stmt = $this->queryRelation($cls, $where, $relation, $this->readOnly, $this);
-						$prop = $stmt->fetch();
-						$stmt->closeCursor();
-						if(!$prop) {
-							$prop = null;
+					}
+				}
+
+				if(!$prop && $relation->autoCreate) {
+					$prop = new $cls($this, true, [], $this->readOnly);
+
+					$this->applyRelationKeys($relation, $prop);
+				}
+				$this->{$relation->name} = $prop;
+				break;
+
+			case Relation::TYPE_ARRAY:
+
+				if(!$shouldQuery) {
+					$prop = [];
+				} else
+				{
+					$stmt = $this->queryRelation($cls, $where, $relation, $this->readOnly, $this);
+
+					$prop = $stmt->fetchAll();
+					$stmt->closeCursor();
+				}
+
+				$this->{$relation->name} = $prop;
+				break;
+
+			case Relation::TYPE_MAP:
+
+				if(!$shouldQuery) {
+					$prop = null;
+				} else
+				{
+					$stmt = $this->queryRelation($cls, $where, $relation, $this->readOnly, $this);
+					$prop = $stmt->fetchAll();
+					$stmt->closeCursor();
+					if(empty($prop)) {
+						$prop = null; //Set to null. Otherwise JSON will be serialized as [] instead of {}
+					}	else{
+						$o = [];
+						foreach($prop as $v) {
+							$key = $this->buildMapKey($v, $relation);
+							$o[$key] = $v;
 						}
+						$prop = $o;
 					}
+				}
 
-					if(!$prop && $relation->autoCreate) {
-						$prop = new $cls($this, true, [], $this->readOnly);
-
-						$this->applyRelationKeys($relation, $prop);
-					}
-					$this->{$relation->name} = $prop;
+				$this->{$relation->name} = $prop;
 				break;
 
-				case Relation::TYPE_ARRAY:
+			case Relation::TYPE_SCALAR:
 
-					if(!$shouldQuery) {
-						$prop = [];
-					} else
-					{
-						$stmt = $this->queryRelation($cls, $where, $relation, $this->readOnly, $this);
-
-						$prop = $stmt->fetchAll();
-						$stmt->closeCursor();
-					}
-
-					$this->{$relation->name} = $prop;
+				if(!$shouldQuery) {
+					$scalar = [];
+				} else {
+					$stmt = $this->queryScalar($where, $relation);
+					$scalar = $stmt->fetchAll();
+					$stmt->closeCursor();
+				}
+				$this->{$relation->name} = $scalar;
 				break;
-
-				case Relation::TYPE_MAP:
-
-					if(!$shouldQuery) {
-						$prop = null;
-					} else
-					{
-						$stmt = $this->queryRelation($cls, $where, $relation, $this->readOnly, $this);
-						$prop = $stmt->fetchAll();
-						$stmt->closeCursor();
-						if(empty($prop)) {
-							$prop = null; //Set to null. Otherwise JSON will be serialized as [] instead of {}
-						}	else{
-							$o = [];
-							foreach($prop as $v) {
-								$key = $this->buildMapKey($v, $relation);
-								$o[$key] = $v;
-							}
-							$prop = $o;
-						}
-					}
-
-					$this->{$relation->name} = $prop;
-				break;
-
-				case Relation::TYPE_SCALAR:
-
-					if(!$shouldQuery) {
-						$scalar = [];
-					} else {
-						$stmt = $this->queryScalar($where, $relation);
-						$scalar = $stmt->fetchAll();
-						$stmt->closeCursor();
-					}
-					$this->{$relation->name} = $scalar;
-				break;
-			}
 		}
 	}
 
@@ -402,7 +440,8 @@ abstract class Property extends Model {
 	 *
 	 * @return void
 	 */
-	public static function clearCachedRelationStmts() {
+	public static function clearCachedRelationStmts(): void
+	{
 		self::$cachedRelationStmts = [];
 	}
 
@@ -601,11 +640,8 @@ abstract class Property extends Model {
 		return new Mapping(static::class);
 	}
 
-	public static function clearCache() {
-//		self::$_mapping = [];
-//		self::$requiredProps = [];
-		self::$cachedRelationStmts = [];
-//		self::$apiProperties = [];
+	public static function clearCache() : void {
+		self::clearCachedRelationStmts();
 	}
 
 	/**
@@ -651,6 +687,15 @@ abstract class Property extends Model {
 			return "";
 		}
 		return count($keys) > 1 ? implode("-", array_values($keys)) : array_values($keys)[0];
+	}
+
+	/**
+	 * List of properties that may not be set through the API. Like modifiedAt, createdAt etc.
+	 * @return array
+	 */
+	public static function readOnlyProps(): array
+	{
+		return ["modifiedBy", "createdAt", "createdBy", "modifiedAt"];
 	}
 
   /**
@@ -1455,6 +1500,7 @@ abstract class Property extends Model {
 			}, $models);
 		}
 
+		$sortOrder = 0;
 		$this->{$relation->name} = [];
 		foreach ($models as $newProp) {
 
@@ -1464,6 +1510,12 @@ abstract class Property extends Model {
 			}
 
 			$this->applyRelationKeys($relation, $newProp);
+
+			// this is also done in {@see Property::patchArray()} but that is only done when settings the relation via {@see setValues()}
+			// when setting the objects directy it relies on this procedure:
+			if(isset($relation->orderBy)) {
+				$newProp->{$relation->orderBy} = $sortOrder++;
+			}
 
 			if (!$newProp->internalSave()) {
 				$this->relatedValidationErrors = $newProp->getValidationErrors();
@@ -1716,13 +1768,11 @@ abstract class Property extends Model {
 	 *
 	 * @param Table $table
 	 * @param array $record
-	 * @throws Exception
+	 * @throws DbException
 	 */
 	protected function insertTableRecord(Table $table, array $record) {
 		$stmt = go()->getDbConnection()->insert($table->getName(), $record);
-		if (!$stmt->execute()) {
-			throw new Exception("Could not execute insert query");
-		}
+		$stmt->execute();
 	}
 
 	/**
@@ -1731,13 +1781,11 @@ abstract class Property extends Model {
 	 * @param Table $table
 	 * @param array $record
 	 * @param Query $query
-	 * @throws Exception
+	 * @throws DbException
 	 */
 	protected function updateTableRecord(Table $table, array $record, Query $query) {
 		$stmt = go()->getDbConnection()->update($table->getName(), $record, $query);
-		if (!$stmt->execute()) {
-			throw new Exception("Could not execute update query");
-		}
+		$stmt->execute();
 	}
 
 	/**
@@ -1822,14 +1870,17 @@ abstract class Property extends Model {
 
 				$this->updateTableRecord($table, $modifiedForTable, $query);
 			}
-		} catch (PDOException $e) {
+		} catch (DbException $e) {
 			ErrorHandler::logException($e);
-			$uniqueKey = Utils::isUniqueKeyException($e);
+			$uniqueKey = $e->isUniqueKeyException();
 
 			if ($uniqueKey) {
 				$index = $table->getIndex($uniqueKey);
+				if($index) {
+					$uniqueKey = $index['Column_name'];
+				}
 
-				$this->setValidationError($index ? $index['Column_name'] : $uniqueKey, ErrorCode::UNIQUE);
+				$this->setValidationError($uniqueKey, ErrorCode::UNIQUE);
 				return false;
 			} else {
 				if(isset($stmt)) {
@@ -1967,19 +2018,14 @@ abstract class Property extends Model {
 	 *
 	 * self::find()->mergeWith($query);
 	 *
+	 * @throws DbException
 	 */
 	protected static function internalDelete(Query $query): bool
 	{
 		$primaryTable = static::getMapping()->getPrimaryTable();
 
 		self::$lastDeleteStmt = go()->getDbConnection()->delete($primaryTable->getName(), $query);
-		if(!self::$lastDeleteStmt->execute()) {
-			return false;
-		}
-//		if(go()->getDebugger()->enabled) {
-//			go()->debug("Deleted " . self::$lastDeleteStmt->rowCount() . " models of type " . static::class);
-//		}
-		return true;
+		return self::$lastDeleteStmt->execute();
 	}
 
 	private function validateTable(MappedTable $table) {
@@ -2037,6 +2083,9 @@ abstract class Property extends Model {
 					$this->setValidationError($column->name, ErrorCode::MALFORMED, "Invalid value (".$value.") for " . $column->dataType);
 					return;
 				}
+				break;
+
+			case "json":
 				break;
 
 			default:
@@ -2248,13 +2297,14 @@ abstract class Property extends Model {
 		}
 
 		// set sort order column defined in relation
+		// needs to be done before save because the order could be the only thing
+		// that has changed and relations need a modified property in order to be saved.
 		if(isset($relation->orderBy)) {
 			$sortOrder = 0;
 			foreach ($this->{$propName} as $newProp) {
 				$newProp->{$relation->orderBy} = $sortOrder++;
 			}
 		}
-
 
 		return $this->$propName;
 	}
@@ -2551,7 +2601,12 @@ abstract class Property extends Model {
 			$col = static::getMapping()->getColumn($name);
 			if($col) {
 				if(!$col->autoIncrement) {
-					$copy->$name = $this->$name;
+					$v = $this->$name;
+					if(is_object($v)) {
+						$copy->$name = clone $v;
+					}	else {
+						$copy->$name = $v;
+					}
 				}
 			} else {
 				$rel = static::getMapping()->getRelation($name);

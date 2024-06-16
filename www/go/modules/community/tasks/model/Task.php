@@ -312,6 +312,7 @@ class Task extends AclItemEntity {
 			$creator = UserDisplay::findById($this->createdBy);
 			if($creator) {
 				$keywords[] = $creator->displayName;
+				$keywords[] = $creator->email;
 			}
 		}
 		return $keywords;
@@ -450,7 +451,8 @@ class Task extends AclItemEntity {
 			}
 		}
 
-		if($this->isModified('assignedTo') && !$this->isModified('progress')) {
+		if($this->isModified('responsibleUserId') && !$this->isModified('progress')) {
+			// when assigned to someone else it's progress should be needs action
 			$this->progress = Progress::NeedsAction;
 		}
 
@@ -476,10 +478,6 @@ class Task extends AclItemEntity {
 		if($this->isModified('responsibleUserId')) {
 
 			if (isset($this->responsibleUserId)) {
-
-				// when assigned to someone else it's progress should be needs action
-				$this->progress = Progress::NeedsAction;
-
 				if($this->responsibleUserId != go()->getUserId()) {
 					$alert = $this->createAlert(new \DateTime(), 'assigned', $this->responsibleUserId)
 						->setData([
@@ -842,13 +840,17 @@ class Task extends AclItemEntity {
 			$commenters[] = $this->responsibleUserId;
 		}
 
+		$isPrivate = $comment->section == "private";
+
 		//add creator too
-		if(!in_array($this->createdBy, $commenters)) {
+		if(!$isPrivate && !in_array($this->createdBy, $commenters)) {
 			$commenters[] = $this->createdBy;
 		}
 
 		//remove creator of this comment
-		$commenters = array_filter($commenters, function($c) use($comment) {return $c != $comment->createdBy;});
+		$commenters = array_filter($commenters, function($c) use($comment, $isPrivate) {
+			return $c != $comment->createdBy && (!$isPrivate || $c != $this->createdBy);
+		});
 
 		// Remove alert for creator of this comment. Other users will get a replaced alert below.
 		CoreAlert::deleteByEntity($this, "comment", $comment->createdBy);
